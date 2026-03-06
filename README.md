@@ -28,6 +28,15 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - `src/` frontend app
 - `server/` backend API (separate Node project)
 - `Student_Management_App.sql` optional manual schema setup
+- `docs/` product + delivery trail documentation
+
+## Project Trail Docs
+
+- `docs/00_PROJECT_TRAIL_OVERVIEW.md`
+- `docs/01_USER_STORIES.md`
+- `docs/02_IMPLEMENTATION_WORKFLOW.md`
+- `docs/03_CHANGE_REQUEST_LOG.md`
+- `docs/04_PROCESS_FLOW_CURRENT_VS_END_GOAL.md`
 
 ## Local Setup
 

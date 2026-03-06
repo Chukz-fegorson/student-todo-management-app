@@ -23,7 +23,11 @@ export default function CommunityFeedPanel({ user }) {
 
   const [commentDrafts, setCommentDrafts] = useState({});
 
-  const canCreatePost = user.role === "school" || user.role === "state" || user.role === "federal";
+  const canCreatePost =
+    user.role === "student" ||
+    user.role === "school" ||
+    user.role === "state" ||
+    user.role === "federal";
   const activePost = useMemo(
     () => posts.find((entry) => entry.id === activePostId) || null,
     [posts, activePostId]
@@ -170,41 +174,47 @@ export default function CommunityFeedPanel({ user }) {
                 onChange={(event) => setPostForm((prev) => ({ ...prev, body: event.target.value }))}
               />
             </div>
-            <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "1fr 1fr 1fr" }}>
-              <div className="field">
-                <label>Scope Type</label>
-                <select
-                  value={postForm.scopeType}
-                  onChange={(event) =>
-                    setPostForm((prev) => ({ ...prev, scopeType: event.target.value }))
-                  }
-                >
-                  {user.role === "federal" && <option value="federal">Federal</option>}
-                  {(user.role === "federal" || user.role === "state") && (
-                    <option value="state">State</option>
-                  )}
-                  <option value="school">School</option>
-                </select>
+            {user.role === "student" ? (
+              <div className="panel-hint">
+                Student posts are published to your school community channel.
               </div>
-              <div className="field">
-                <label>Scope State (if needed)</label>
-                <input
-                  value={postForm.scopeStateName}
-                  onChange={(event) =>
-                    setPostForm((prev) => ({ ...prev, scopeStateName: event.target.value }))
-                  }
-                />
+            ) : (
+              <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "1fr 1fr 1fr" }}>
+                <div className="field">
+                  <label>Scope Type</label>
+                  <select
+                    value={postForm.scopeType}
+                    onChange={(event) =>
+                      setPostForm((prev) => ({ ...prev, scopeType: event.target.value }))
+                    }
+                  >
+                    {user.role === "federal" && <option value="federal">Federal</option>}
+                    {(user.role === "federal" || user.role === "state") && (
+                      <option value="state">State</option>
+                    )}
+                    <option value="school">School</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Scope State (if needed)</label>
+                  <input
+                    value={postForm.scopeStateName}
+                    onChange={(event) =>
+                      setPostForm((prev) => ({ ...prev, scopeStateName: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Scope School ID (if needed)</label>
+                  <input
+                    value={postForm.scopeSchoolId}
+                    onChange={(event) =>
+                      setPostForm((prev) => ({ ...prev, scopeSchoolId: event.target.value }))
+                    }
+                  />
+                </div>
               </div>
-              <div className="field">
-                <label>Scope School ID (if needed)</label>
-                <input
-                  value={postForm.scopeSchoolId}
-                  onChange={(event) =>
-                    setPostForm((prev) => ({ ...prev, scopeSchoolId: event.target.value }))
-                  }
-                />
-              </div>
-            </div>
+            )}
             <button className="btn btn-primary btn-sm" disabled={busy} onClick={createPost}>
               Publish
             </button>

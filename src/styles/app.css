@@ -344,6 +344,18 @@
   width: min(1180px, 98vw);
 }
 
+.collab-embed-shell {
+  width: 100%;
+}
+
+.collab-panel {
+  margin-top: 1rem;
+}
+
+.collab-panel .modal-title {
+  margin-bottom: 0.35rem;
+}
+
 .collab-header {
   display: flex;
   align-items: flex-start;
@@ -962,6 +974,26 @@
   text-transform: uppercase;
 }
 
+.market-card-chip-student {
+  border-color: rgba(79, 142, 247, 0.42);
+  color: #8ab7ff;
+}
+
+.market-card-chip-school {
+  border-color: rgba(62, 207, 142, 0.45);
+  color: #7cf0bf;
+}
+
+.market-card-chip-state {
+  border-color: rgba(246, 185, 59, 0.45);
+  color: #ffd27b;
+}
+
+.market-card-chip-federal {
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #cfbeff;
+}
+
 .market-card-body {
   padding: 0.7rem 0.75rem 0.5rem;
   display: flex;
@@ -1096,6 +1128,30 @@
   background: var(--surface);
   color: var(--text);
   padding: 0.55rem 0.6rem;
+}
+
+.market-rating-input {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.market-star-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.market-star-btn.active {
+  color: #ffcf40;
+  border-color: #ffcf40;
+  background: rgba(255, 207, 64, 0.12);
 }
 
 @media (max-width: 1280px) {

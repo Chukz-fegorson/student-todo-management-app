@@ -14,10 +14,11 @@ import TodoModal from "../components/TodoModal";
 import DeleteModal from "../components/DeleteModal";
 import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
+import CollaborationHubModal from "../components/CollaborationHubModal";
 
 const REMINDER_SEEN_KEY = "reminders_seen";
 
-export default function StudentApp({ user, onOpenCollab }) {
+export default function StudentApp({ user }) {
   const [todos, setTodos] = useState([]);
   const [loadingTodos, setLoadingTodos] = useState(true);
   const [error, setError] = useState("");
@@ -180,7 +181,10 @@ export default function StudentApp({ user, onOpenCollab }) {
         >
           My Tasks
         </button>
-        <button className="view-tab module-tab" onClick={onOpenCollab}>
+        <button
+          className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
+          onClick={() => setView("collab")}
+        >
           Collab Hub
         </button>
         <button
@@ -263,6 +267,8 @@ export default function StudentApp({ user, onOpenCollab }) {
         <FeesWorkspace user={user} />
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />
+      ) : view === "collab" ? (
+        <CollaborationHubModal user={user} embedded />
       ) : loadingTodos ? (
         <div className="empty">
           <div className="empty-icon">...</div>

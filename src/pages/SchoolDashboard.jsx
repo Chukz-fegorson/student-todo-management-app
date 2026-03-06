@@ -21,6 +21,7 @@ import GradeChip from "../components/GradeChip";
 import GradeModal from "../components/GradeModal";
 import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
+import CollaborationHubModal from "../components/CollaborationHubModal";
 
 const assignmentDefaults = {
   title: "",
@@ -44,7 +45,7 @@ function matchesFilters(item, lgaFilter, schoolFilter) {
   return lgaMatch && schoolMatch;
 }
 
-function SchoolDashboard({ user, onOpenCollab }) {
+function SchoolDashboard({ user }) {
   const [students, setStudents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -208,7 +209,10 @@ function SchoolDashboard({ user, onOpenCollab }) {
         >
           Tasks
         </button>
-        <button className="view-tab module-tab" onClick={onOpenCollab}>
+        <button
+          className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
+          onClick={() => setView("collab")}
+        >
           Collab Hub
         </button>
         <button
@@ -325,6 +329,8 @@ function SchoolDashboard({ user, onOpenCollab }) {
         <FeesWorkspace user={user} />
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />
+      ) : view === "collab" ? (
+        <CollaborationHubModal user={user} embedded />
       ) : (
         <>
       <div className="dashboard-grid">

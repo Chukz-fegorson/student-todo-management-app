@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../lib/api";
+import {
+  GENDER_OPTIONS,
+  NIGERIA_STATES,
+  buildStateLgaIndex,
+  getLgaOptionsForState,
+} from "../lib/locationData";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -68,9 +74,14 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
     () => schools.find((school) => school.id === form.schoolId) || null,
     [schools, form.schoolId]
   );
+  const stateLgaIndex = useMemo(() => buildStateLgaIndex(schools), [schools]);
 
   const resolvedState = selectedSchool?.stateName || form.stateName;
   const resolvedLga = selectedSchool?.lgaName || form.lgaName;
+  const lgaOptions = useMemo(
+    () => getLgaOptionsForState(stateLgaIndex, resolvedState, [resolvedLga]),
+    [stateLgaIndex, resolvedState, resolvedLga]
+  );
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -217,11 +228,17 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
           <div className="field">
             <label>Gender</label>
-            <input
+            <select
               value={form.gender}
               onChange={(event) => setField("gender", event.target.value)}
-              placeholder="e.g. Female"
-            />
+            >
+              <option value="">Select gender</option>
+              {GENDER_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>Guardian Name</label>
@@ -278,21 +295,40 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
               </div>
               <div className="field">
                 <label>State</label>
-                <input
+                <select
                   value={resolvedState || ""}
-                  onChange={(event) => setField("stateName", event.target.value)}
+                  onChange={(event) => {
+                    setField("stateName", event.target.value);
+                    setField("lgaName", "");
+                  }}
                   disabled={Boolean(form.schoolId)}
-                />
+                >
+                  <option value="">Select state</option>
+                  {NIGERIA_STATES.map((stateName) => (
+                    <option key={stateName} value={stateName}>
+                      {stateName}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
             <div className="field">
               <label>LGA</label>
-              <input
+              <select
                 value={resolvedLga || ""}
                 onChange={(event) => setField("lgaName", event.target.value)}
                 disabled={Boolean(form.schoolId)}
-              />
+              >
+                <option value="">
+                  {resolvedState ? "Select LGA" : "Select state first"}
+                </option>
+                {lgaOptions.map((lgaName) => (
+                  <option key={lgaName} value={lgaName}>
+                    {lgaName}
+                  </option>
+                ))}
+              </select>
             </div>
           </>
         )}
@@ -301,17 +337,35 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
             <div className="field">
               <label>State</label>
-              <input
+              <select
                 value={form.stateName}
-                onChange={(event) => setField("stateName", event.target.value)}
-              />
+                onChange={(event) => {
+                  setField("stateName", event.target.value);
+                  setField("lgaName", "");
+                }}
+              >
+                <option value="">Select state</option>
+                {NIGERIA_STATES.map((stateName) => (
+                  <option key={stateName} value={stateName}>
+                    {stateName}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label>LGA</label>
-              <input
+              <select
                 value={form.lgaName}
                 onChange={(event) => setField("lgaName", event.target.value)}
-              />
+                disabled={!form.stateName}
+              >
+                <option value="">{form.stateName ? "Select LGA" : "Select state first"}</option>
+                {lgaOptions.map((lgaName) => (
+                  <option key={lgaName} value={lgaName}>
+                    {lgaName}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         )}
@@ -319,10 +373,17 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
         {user.role === "state" && (
           <div className="field">
             <label>State *</label>
-            <input
+            <select
               value={form.stateName}
               onChange={(event) => setField("stateName", event.target.value)}
-            />
+            >
+              <option value="">Select state</option>
+              {NIGERIA_STATES.map((stateName) => (
+                <option key={stateName} value={stateName}>
+                  {stateName}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 

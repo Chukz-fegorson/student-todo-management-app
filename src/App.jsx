@@ -6,14 +6,12 @@ import AuthPage from "./pages/AuthPage";
 import StudentApp from "./pages/StudentApp";
 import SchoolDashboard from "./pages/SchoolDashboard";
 import AccountModal from "./components/AccountModal";
-import CollaborationHubModal from "./components/CollaborationHubModal";
 import NotificationCenter from "./components/NotificationCenter";
 
 export default function App() {
   const [user, setUser] = useState(() => getSession());
   const [checkingSession, setCheckingSession] = useState(true);
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showCollabModal, setShowCollabModal] = useState(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState("");
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
@@ -92,7 +90,6 @@ export default function App() {
   function handleLogout() {
     clearAllAuth();
     setShowAccountModal(false);
-    setShowCollabModal(false);
     setAccountError("");
     setUser(null);
   }
@@ -198,9 +195,9 @@ export default function App() {
       )}
 
       {isStudent ? (
-        <StudentApp user={user} onOpenCollab={() => setShowCollabModal(true)} />
+        <StudentApp user={user} />
       ) : (
-        <SchoolDashboard user={user} onOpenCollab={() => setShowCollabModal(true)} />
+        <SchoolDashboard user={user} />
       )}
 
       {showAccountModal && (
@@ -213,13 +210,6 @@ export default function App() {
             setAccountError("");
             setShowAccountModal(false);
           }}
-        />
-      )}
-
-      {showCollabModal && (
-        <CollaborationHubModal
-          user={user}
-          onClose={() => setShowCollabModal(false)}
         />
       )}
     </div>

@@ -112,7 +112,7 @@ function isTranscriptLikeFile(file) {
   );
 }
 
-export default function CollaborationHubModal({ user, onClose }) {
+export default function CollaborationHubModal({ user, onClose, embedded = false }) {
   const [tab, setTab] = useState("chat");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -139,6 +139,7 @@ export default function CollaborationHubModal({ user, onClose }) {
   const [meetingDetail, setMeetingDetail] = useState(null);
   const [loadingMeetingDetail, setLoadingMeetingDetail] = useState(false);
   const [meetingParticipantSearch, setMeetingParticipantSearch] = useState("");
+  const [showCreateMeetingForm, setShowCreateMeetingForm] = useState(false);
 
   const [notesTranscript, setNotesTranscript] = useState("");
   const [notesSummary, setNotesSummary] = useState(null);
@@ -455,6 +456,7 @@ export default function CollaborationHubModal({ user, onClose }) {
 
       setMeetings((prev) => [created, ...prev.filter((m) => m.id !== created.id)]);
       setMeetingForm(defaultMeetingForm());
+      setShowCreateMeetingForm(false);
       setActiveMeetingId(created.id);
       setMeetingDetail(created);
       setNotesTranscript(created?.notes?.transcript || "");
@@ -823,6 +825,7 @@ export default function CollaborationHubModal({ user, onClose }) {
       durationMinutes: 30,
       participantIds,
     });
+    setShowCreateMeetingForm(true);
     setNotice("Follow-up meeting draft prepared in the Create Meeting form.");
   }
 
@@ -950,18 +953,22 @@ export default function CollaborationHubModal({ user, onClose }) {
           "Call ended while closing hub. Transcript and report were saved.",
       });
     }
-    onClose();
+    if (typeof onClose === "function") onClose();
   }
 
   return (
     <div
-      className="modal-overlay"
-      onClick={async (event) => {
-        if (event.target !== event.currentTarget) return;
-        await handleCloseHub();
-      }}
+      className={embedded ? "collab-embed-shell" : "modal-overlay"}
+      onClick={
+        embedded
+          ? undefined
+          : async (event) => {
+              if (event.target !== event.currentTarget) return;
+              await handleCloseHub();
+            }
+      }
     >
-      <div className="modal modal-collab">
+      <div className={embedded ? "panel collab-panel" : "modal modal-collab"}>
         <div className="collab-header">
           <div>
             <div className="modal-title">Collaboration Hub</div>
@@ -971,13 +978,15 @@ export default function CollaborationHubModal({ user, onClose }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={handleCloseHub}
-          >
-            Close
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={handleCloseHub}
+            >
+              Close
+            </button>
+          )}
         </div>
 
         <div className="collab-tabs">
@@ -1157,100 +1166,112 @@ export default function CollaborationHubModal({ user, onClose }) {
         {tab === "meetings" && (
           <div className="collab-grid">
             <aside className="collab-sidebar">
-              <form onSubmit={createMeeting}>
-                <div className="panel-subtitle">Create Meeting</div>
-                <div className="field">
-                  <label>Title *</label>
-                  <input
-                    value={meetingForm.title}
-                    onChange={(event) =>
-                      setMeetingForm((prev) => ({
-                        ...prev,
-                        title: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. SS2 Chemistry Review"
-                  />
-                </div>
-                <div className="field">
-                  <label>Description</label>
-                  <textarea
-                    value={meetingForm.description}
-                    onChange={(event) =>
-                      setMeetingForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Agenda and expected outcomes..."
-                  />
-                </div>
-                <div className="field">
-                  <label>Scheduled Time *</label>
-                  <input
-                    type="datetime-local"
-                    value={meetingForm.scheduledFor}
-                    onChange={(event) =>
-                      setMeetingForm((prev) => ({
-                        ...prev,
-                        scheduledFor: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="field">
-                  <label>Duration (minutes)</label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="480"
-                    value={meetingForm.durationMinutes}
-                    onChange={(event) =>
-                      setMeetingForm((prev) => ({
-                        ...prev,
-                        durationMinutes: Number(event.target.value) || 45,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="panel-subtitle">
-                  Participants ({meetingForm.participantIds.length})
-                </div>
-                <div className="field">
-                  <label>Search Participants</label>
-                  <input
-                    value={meetingParticipantSearch}
-                    onChange={(event) =>
-                      setMeetingParticipantSearch(event.target.value)
-                    }
-                    placeholder="Filter participants..."
-                  />
-                </div>
-                <div className="collab-checklist">
-                  {!meetingParticipantDirectory.length && (
-                    <div className="empty-col">No participants match your search.</div>
-                  )}
-                  {meetingParticipantDirectory.map((entry) => (
-                    <label key={entry.id} className="check-item">
-                      <input
-                        type="checkbox"
-                        checked={meetingForm.participantIds.includes(entry.id)}
-                        onChange={() => toggleParticipant(entry.id)}
-                      />
-                      {entry.name}
-                    </label>
-                  ))}
-                </div>
-
+              <div className="panel-actions">
                 <button
-                  type="submit"
-                  className="btn btn-primary btn-full"
-                  disabled={creatingMeeting}
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowCreateMeetingForm((prev) => !prev)}
                 >
-                  {creatingMeeting ? "Creating..." : "Create Meeting"}
+                  {showCreateMeetingForm ? "Hide Create Meeting" : "Create Meeting"}
                 </button>
-              </form>
+              </div>
+
+              {showCreateMeetingForm && (
+                <form onSubmit={createMeeting}>
+                  <div className="panel-subtitle">Create Meeting</div>
+                  <div className="field">
+                    <label>Title *</label>
+                    <input
+                      value={meetingForm.title}
+                      onChange={(event) =>
+                        setMeetingForm((prev) => ({
+                          ...prev,
+                          title: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. SS2 Chemistry Review"
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Description</label>
+                    <textarea
+                      value={meetingForm.description}
+                      onChange={(event) =>
+                        setMeetingForm((prev) => ({
+                          ...prev,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="Agenda and expected outcomes..."
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Scheduled Time *</label>
+                    <input
+                      type="datetime-local"
+                      value={meetingForm.scheduledFor}
+                      onChange={(event) =>
+                        setMeetingForm((prev) => ({
+                          ...prev,
+                          scheduledFor: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="480"
+                      value={meetingForm.durationMinutes}
+                      onChange={(event) =>
+                        setMeetingForm((prev) => ({
+                          ...prev,
+                          durationMinutes: Number(event.target.value) || 45,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="panel-subtitle">
+                    Participants ({meetingForm.participantIds.length})
+                  </div>
+                  <div className="field">
+                    <label>Search Participants</label>
+                    <input
+                      value={meetingParticipantSearch}
+                      onChange={(event) =>
+                        setMeetingParticipantSearch(event.target.value)
+                      }
+                      placeholder="Filter participants..."
+                    />
+                  </div>
+                  <div className="collab-checklist">
+                    {!meetingParticipantDirectory.length && (
+                      <div className="empty-col">No participants match your search.</div>
+                    )}
+                    {meetingParticipantDirectory.map((entry) => (
+                      <label key={entry.id} className="check-item">
+                        <input
+                          type="checkbox"
+                          checked={meetingForm.participantIds.includes(entry.id)}
+                          onChange={() => toggleParticipant(entry.id)}
+                        />
+                        {entry.name}
+                      </label>
+                    ))}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-full"
+                    disabled={creatingMeeting}
+                  >
+                    {creatingMeeting ? "Creating..." : "Create Meeting"}
+                  </button>
+                </form>
+              )}
 
               <div className="panel-subtitle">Meeting Calendar (Past + Upcoming)</div>
               <div className="view-tabs">

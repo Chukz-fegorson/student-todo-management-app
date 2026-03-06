@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, setToken } from "../lib/api";
 import { ROLE_LABELS } from "../lib/constants";
+import {
+  NIGERIA_STATES,
+  buildStateLgaIndex,
+  getLgaOptionsForState,
+} from "../lib/locationData";
 import { setSession } from "../lib/storage";
 
 const roleOptions = [
@@ -37,6 +42,11 @@ export default function AuthPage({ onLogin }) {
   });
 
   const email = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
+  const stateLgaIndex = useMemo(() => buildStateLgaIndex(schools), [schools]);
+  const lgaOptions = useMemo(
+    () => getLgaOptionsForState(stateLgaIndex, form.stateName, [form.lgaName]),
+    [stateLgaIndex, form.stateName, form.lgaName]
+  );
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
@@ -316,21 +326,37 @@ export default function AuthPage({ onLogin }) {
                   </div>
                   <div className="field">
                     <label>State (optional)</label>
-                    <input
-                      placeholder="e.g. Lagos"
+                    <select
                       value={form.stateName}
-                      onChange={(event) => setField("stateName", event.target.value)}
-                    />
+                      onChange={(event) => {
+                        setField("stateName", event.target.value);
+                        setField("lgaName", "");
+                      }}
+                    >
+                      <option value="">Select state</option>
+                      {NIGERIA_STATES.map((stateName) => (
+                        <option key={stateName} value={stateName}>
+                          {stateName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 <div className="field">
                   <label>LGA (optional)</label>
-                  <input
-                    placeholder="e.g. Ikeja"
+                  <select
                     value={form.lgaName}
                     onChange={(event) => setField("lgaName", event.target.value)}
-                  />
+                    disabled={!form.stateName}
+                  >
+                    <option value="">{form.stateName ? "Select LGA" : "Select state first"}</option>
+                    {lgaOptions.map((lgaName) => (
+                      <option key={lgaName} value={lgaName}>
+                        {lgaName}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </>
             )}
@@ -349,19 +375,35 @@ export default function AuthPage({ onLogin }) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                   <div className="field">
                     <label>State *</label>
-                    <input
-                      placeholder="e.g. Lagos"
+                    <select
                       value={form.stateName}
-                      onChange={(event) => setField("stateName", event.target.value)}
-                    />
+                      onChange={(event) => {
+                        setField("stateName", event.target.value);
+                        setField("lgaName", "");
+                      }}
+                    >
+                      <option value="">Select state</option>
+                      {NIGERIA_STATES.map((stateName) => (
+                        <option key={stateName} value={stateName}>
+                          {stateName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="field">
                     <label>LGA *</label>
-                    <input
-                      placeholder="e.g. Ikeja"
+                    <select
                       value={form.lgaName}
                       onChange={(event) => setField("lgaName", event.target.value)}
-                    />
+                      disabled={!form.stateName}
+                    >
+                      <option value="">{form.stateName ? "Select LGA" : "Select state first"}</option>
+                      {lgaOptions.map((lgaName) => (
+                        <option key={lgaName} value={lgaName}>
+                          {lgaName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </>
@@ -370,11 +412,17 @@ export default function AuthPage({ onLogin }) {
             {role === "state" && (
               <div className="field">
                 <label>State *</label>
-                <input
-                  placeholder="e.g. Kaduna"
+                <select
                   value={form.stateName}
                   onChange={(event) => setField("stateName", event.target.value)}
-                />
+                >
+                  <option value="">Select state</option>
+                  {NIGERIA_STATES.map((stateName) => (
+                    <option key={stateName} value={stateName}>
+                      {stateName}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

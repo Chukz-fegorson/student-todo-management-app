@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
+import {
+  NIGERIA_STATES,
+  buildStateLgaIndex,
+  getLgaOptionsForState,
+} from "../lib/locationData";
 
 function asNaira(valueKobo, valueNaira) {
   if (Number.isFinite(Number(valueNaira))) return Number(valueNaira);
@@ -40,6 +45,22 @@ const EMPTY_FILTERS = Object.freeze({
   sellerNearMe: false,
 });
 
+const OTHER_CATEGORY_VALUE = "__other__";
+
+function marketChipMeta(product) {
+  const role = String(product?.sellerRole || "").toLowerCase();
+  if (role === "federal") {
+    return { label: "Federal Market", className: "market-card-chip-federal" };
+  }
+  if (role === "state") {
+    return { label: "State Market", className: "market-card-chip-state" };
+  }
+  if (role === "school" || product?.listingType === "school") {
+    return { label: "School Store", className: "market-card-chip-school" };
+  }
+  return { label: "Student Market", className: "market-card-chip-student" };
+}
+
 export default function MarketplaceWorkspace({ user }) {
   const [categories, setCategories] = useState([]);
   const [categoryRequests, setCategoryRequests] = useState([]);
@@ -57,6 +78,7 @@ export default function MarketplaceWorkspace({ user }) {
     title: "",
     description: "",
     categoryId: "",
+    customCategoryName: "",
     condition: "new",
     priceNaira: "",
     quantity: 1,
@@ -64,6 +86,7 @@ export default function MarketplaceWorkspace({ user }) {
     mediaUrlDraft: "",
   });
   const [categoryRequestName, setCategoryRequestName] = useState("");
+  const [sellCategoryName, setSellCategoryName] = useState("");
   const [claimCodes, setClaimCodes] = useState({});
   const [marketView, setMarketView] = useState("browse");
 
@@ -71,6 +94,7 @@ export default function MarketplaceWorkspace({ user }) {
   const [detailMediaIndex, setDetailMediaIndex] = useState(0);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
   const [offerDraft, setOfferDraft] = useState({ amountNaira: "", note: "" });
+  const [reviewDraft, setReviewDraft] = useState({ rating: 5, reviewText: "" });
 
   const canModerate =
     user.role === "school" || user.role === "state" || user.role === "federal";
@@ -103,6 +127,21 @@ export default function MarketplaceWorkspace({ user }) {
     () => orders.filter((entry) => entry.status === "Completed"),
     [orders]
   );
+  const productStateIndex = useMemo(() => buildStateLgaIndex(products), [products]);
+  const filterLgaOptions = useMemo(
+    () => getLgaOptionsForState(productStateIndex, filtersDraft.state, [filtersDraft.lga]),
+    [productStateIndex, filtersDraft.state, filtersDraft.lga]
+  );
+  const filterStateOptions = useMemo(() => {
+    const discovered = new Set(
+      products
+        .map((product) => String(product.stateName || "").trim())
+        .filter(Boolean)
+    );
+    for (const stateName of NIGERIA_STATES) discovered.add(stateName);
+    if (filtersDraft.state) discovered.add(filtersDraft.state);
+    return Array.from(discovered).sort((a, b) => a.localeCompare(b));
+  }, [products, filtersDraft.state]);
 
   const loadMarketplace = useCallback(async () => {
     try {
@@ -155,6 +194,10 @@ export default function MarketplaceWorkspace({ user }) {
     if (detailMediaIndex > selectedMediaList.length - 1) setDetailMediaIndex(0);
   }, [selectedMediaList, detailMediaIndex]);
 
+  useEffect(() => {
+    setReviewDraft({ rating: 5, reviewText: "" });
+  }, [selectedProductId]);
+
   function applyFilters() {
     setFiltersApplied({ ...filtersDraft });
   }
@@ -197,7 +240,7 @@ export default function MarketplaceWorkspace({ user }) {
     try {
       setBusy(true);
       const next = [];
-      for (const file of files.slice(0, 6)) {
+      for (const file of files.slice(0, 12)) {
         if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
         if (file.size > 8 * 1024 * 1024) continue;
         const dataUrl = await fileToDataUrl(file);
@@ -212,7 +255,7 @@ export default function MarketplaceWorkspace({ user }) {
       }
       setListingForm((prev) => ({
         ...prev,
-        mediaUrls: [...prev.mediaUrls, ...next].slice(0, 8),
+        mediaUrls: [...prev.mediaUrls, ...next].slice(0, 12),
       }));
     } catch (err) {
       setError(err.message || "Failed to process media files.");
@@ -232,6 +275,11 @@ export default function MarketplaceWorkspace({ user }) {
   async function createListing() {
     if (!listingForm.title.trim()) return setError("Product title is required.");
     if (!Number(listingForm.priceNaira)) return setError("Valid price is required.");
+    const isCustomCategory = listingForm.categoryId === OTHER_CATEGORY_VALUE;
+    const customCategoryName = String(listingForm.customCategoryName || "").trim();
+    if (isCustomCategory && !customCategoryName) {
+      return setError("Enter custom category name when 'Others' is selected.");
+    }
     try {
       setBusy(true);
       setError("");
@@ -239,7 +287,9 @@ export default function MarketplaceWorkspace({ user }) {
         title: listingForm.title.trim(),
         description: listingForm.description.trim() || null,
         mediaUrls: listingForm.mediaUrls,
-        categoryId: listingForm.categoryId || null,
+        categoryId:
+          listingForm.categoryId && !isCustomCategory ? listingForm.categoryId : null,
+        customCategoryName: isCustomCategory ? customCategoryName : null,
         condition: listingForm.condition,
         priceNaira: Number(listingForm.priceNaira),
         quantity: Number(listingForm.quantity || 1),
@@ -248,6 +298,7 @@ export default function MarketplaceWorkspace({ user }) {
         title: "",
         description: "",
         categoryId: "",
+        customCategoryName: "",
         condition: "new",
         priceNaira: "",
         quantity: 1,
@@ -263,18 +314,35 @@ export default function MarketplaceWorkspace({ user }) {
     }
   }
 
-  async function requestCategory() {
-    if (!categoryRequestName.trim()) return setError("Enter category name.");
+  async function requestCategory(options = {}) {
+    const name = String(options.name ?? categoryRequestName).trim();
+    if (!name) return setError("Enter category name.");
+    const listingTypeForRequest = options.listingType || "student";
+    const autoApprove = Boolean(options.autoApprove);
     try {
       setBusy(true);
       setError("");
-      await apiPost("/market/categories/request", {
-        name: categoryRequestName.trim(),
-        listingType: "student",
+      const created = await apiPost("/market/categories/request", {
+        name,
+        listingType: listingTypeForRequest,
       });
-      setCategoryRequestName("");
-      setNotice("Category request submitted for school approval.");
+      if (autoApprove && created?.id) {
+        await apiPost(`/market/categories/${created.id}/approve`, { action: "approve" });
+      }
+      if (options.name !== undefined) {
+        setSellCategoryName("");
+      } else {
+        setCategoryRequestName("");
+      }
+      setNotice(
+        autoApprove
+          ? "Category created and approved."
+          : "Category request submitted for school approval."
+      );
       await loadMarketplace();
+      if (created?.id) {
+        setListingForm((prev) => ({ ...prev, categoryId: created.id }));
+      }
     } catch (err) {
       setError(err.message || "Failed to request category.");
     } finally {
@@ -399,18 +467,19 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function reviewProduct(productId) {
-    const ratingText = window.prompt("Rating (1-5):", "5");
-    const rating = Number(ratingText);
-    if (!Number.isFinite(rating) || rating < 1 || rating > 5) return;
-    const reviewText = window.prompt("Feedback/review (optional):", "");
+    const rating = Math.max(1, Math.min(5, Number(reviewDraft.rating) || 0));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      return setError("Choose a star rating between 1 and 5.");
+    }
     try {
       setBusy(true);
       setError("");
       await apiPost(`/market/products/${productId}/reviews`, {
         rating,
-        reviewText: reviewText ? String(reviewText).trim() : null,
+        reviewText: reviewDraft.reviewText.trim() || null,
       });
       setNotice("Review saved.");
+      setReviewDraft({ rating: 5, reviewText: "" });
       await loadMarketplace();
     } catch (err) {
       setError(err.message || "Failed to submit review.");
@@ -494,20 +563,37 @@ export default function MarketplaceWorkspace({ user }) {
             setFiltersDraft((prev) => ({ ...prev, q: event.target.value }))
           }
         />
-        <input
-          placeholder="State"
+        <select
           value={filtersDraft.state}
           onChange={(event) =>
-            setFiltersDraft((prev) => ({ ...prev, state: event.target.value }))
+            setFiltersDraft((prev) => ({
+              ...prev,
+              state: event.target.value,
+              lga: "",
+            }))
           }
-        />
-        <input
-          placeholder="LGA"
+        >
+          <option value="">All states</option>
+          {filterStateOptions.map((stateName) => (
+            <option key={stateName} value={stateName}>
+              {stateName}
+            </option>
+          ))}
+        </select>
+        <select
           value={filtersDraft.lga}
           onChange={(event) =>
             setFiltersDraft((prev) => ({ ...prev, lga: event.target.value }))
           }
-        />
+          disabled={!filtersDraft.state}
+        >
+          <option value="">{filtersDraft.state ? "All LGAs" : "Select state first"}</option>
+          {filterLgaOptions.map((lgaName) => (
+            <option key={lgaName} value={lgaName}>
+              {lgaName}
+            </option>
+          ))}
+        </select>
         <input
           placeholder="School ID"
           value={filtersDraft.schoolId}
@@ -583,9 +669,15 @@ export default function MarketplaceWorkspace({ user }) {
               <label>Category</label>
               <select
                 value={listingForm.categoryId}
-                onChange={(event) =>
-                  setListingForm((prev) => ({ ...prev, categoryId: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setListingForm((prev) => ({
+                    ...prev,
+                    categoryId: nextValue,
+                    customCategoryName:
+                      nextValue === OTHER_CATEGORY_VALUE ? prev.customCategoryName : "",
+                  }));
+                }}
               >
                 <option value="">No category</option>
                 {productCategories.map((category) => (
@@ -593,6 +685,7 @@ export default function MarketplaceWorkspace({ user }) {
                     {category.name}
                   </option>
                 ))}
+                <option value={OTHER_CATEGORY_VALUE}>Others (custom)</option>
               </select>
             </div>
             <div className="field">
@@ -629,6 +722,53 @@ export default function MarketplaceWorkspace({ user }) {
               />
             </div>
           </div>
+          {listingForm.categoryId === OTHER_CATEGORY_VALUE && (
+            <div className="field">
+              <label>Custom Category Label</label>
+              <input
+                placeholder="e.g. Robotics Components"
+                value={listingForm.customCategoryName}
+                onChange={(event) =>
+                  setListingForm((prev) => ({
+                    ...prev,
+                    customCategoryName: event.target.value,
+                  }))
+                }
+              />
+              <div className="panel-hint">
+                This custom label is only attached to this listing and does not change the
+                standardized category list.
+              </div>
+            </div>
+          )}
+
+          {user.role === "school" && (
+            <div className="field">
+              <label>Add School Category</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  style={{ flex: 1 }}
+                  placeholder="e.g. School Branded Materials"
+                  value={sellCategoryName}
+                  onChange={(event) => setSellCategoryName(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy}
+                  onClick={() =>
+                    requestCategory({
+                      name: sellCategoryName,
+                      listingType: "school",
+                      autoApprove: true,
+                    })
+                  }
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="field">
             <label>Media (Images/Videos)</label>
@@ -729,6 +869,7 @@ export default function MarketplaceWorkspace({ user }) {
           <div className="market-grid">
         {products.map((product) => {
           const mine = product.sellerUserId === user.id;
+          const chip = marketChipMeta(product);
           const primary =
             Array.isArray(product.mediaUrls) && product.mediaUrls.length
               ? product.mediaUrls[0]
@@ -757,14 +898,19 @@ export default function MarketplaceWorkspace({ user }) {
                   ) : (
                     <div className="market-card-media-empty">No media</div>
                   )}
-                  <span className="market-card-chip">
-                    {product.listingType === "school" ? "School Store" : "Student Market"}
+                  <span className={`market-card-chip ${chip.className}`}>
+                    {chip.label}
                   </span>
                 </div>
                 <div className="market-card-body">
                   <div className="market-card-title">{product.title}</div>
                   <div className="market-card-price">
                     N{asNaira(product.priceKobo, product.priceNaira).toLocaleString()}
+                  </div>
+                  <div className="market-card-meta">
+                    <span>
+                      {product.categoryName || product.customCategoryName || "Uncategorized"}
+                    </span>
                   </div>
                   <div className="market-card-meta">
                     <span>{product.sellerName || "Seller"}</span>
@@ -974,6 +1120,14 @@ export default function MarketplaceWorkspace({ user }) {
                   N{asNaira(selectedProduct.priceKobo, selectedProduct.priceNaira).toLocaleString()}
                 </div>
                 <div className="review-card-meta" style={{ marginBottom: "0.6rem" }}>
+                  <span>{marketChipMeta(selectedProduct).label}</span>
+                  <span>|</span>
+                  <span>
+                    {selectedProduct.categoryName ||
+                      selectedProduct.customCategoryName ||
+                      "Uncategorized"}
+                  </span>
+                  <span>|</span>
                   <span>{selectedProduct.condition}</span>
                   <span>|</span>
                   <span>Qty: {selectedProduct.quantityAvailable}</span>
@@ -1057,14 +1211,49 @@ export default function MarketplaceWorkspace({ user }) {
                   </div>
                 )}
 
+                {selectedProduct.sellerUserId !== user.id && (
+                  <div className="market-detail-action-box">
+                    <div className="panel-subtitle">Rate & Review</div>
+                    <div className="market-rating-input">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          className={`market-star-btn ${
+                            Number(reviewDraft.rating) >= star ? "active" : ""
+                          }`}
+                          onClick={() =>
+                            setReviewDraft((prev) => ({ ...prev, rating: star }))
+                          }
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                    <div className="field">
+                      <label>Review (Optional)</label>
+                      <textarea
+                        value={reviewDraft.reviewText}
+                        onChange={(event) =>
+                          setReviewDraft((prev) => ({
+                            ...prev,
+                            reviewText: event.target.value,
+                          }))
+                        }
+                        placeholder="Share your feedback on this product..."
+                      />
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => reviewProduct(selectedProduct.id)}
+                    >
+                      Submit 5-Star Review
+                    </button>
+                  </div>
+                )}
+
                 <div className="panel-actions" style={{ marginTop: "0.8rem" }}>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    disabled={busy}
-                    onClick={() => reviewProduct(selectedProduct.id)}
-                  >
-                    Review
-                  </button>
                   <button
                     className="btn btn-ghost btn-sm"
                     disabled={busy}

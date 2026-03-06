@@ -201,9 +201,28 @@ function SchoolDashboard({ user, onOpenCollab }) {
 
   return (
     <div className="main">
-      <div className="review-banner">
-        <strong>{roleLabel} Dashboard</strong> | Assign tasks, review submissions,
-        grade students, and track progress across your permitted scope.
+      <div className="view-tabs module-tabs">
+        <button
+          className={`view-tab module-tab ${view === "tasks" ? "active" : ""}`}
+          onClick={() => setView("tasks")}
+        >
+          Tasks
+        </button>
+        <button className="view-tab module-tab" onClick={onOpenCollab}>
+          Collab Hub
+        </button>
+        <button
+          className={`view-tab module-tab ${view === "fees" ? "active" : ""}`}
+          onClick={() => setView("fees")}
+        >
+          Fees
+        </button>
+        <button
+          className={`view-tab module-tab ${view === "market" ? "active" : ""}`}
+          onClick={() => setView("market")}
+        >
+          Marketplace
+        </button>
       </div>
 
       {notice && (
@@ -216,104 +235,91 @@ function SchoolDashboard({ user, onOpenCollab }) {
 
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="stats-bar stats-bar-teacher">
-        <div className="stat-card">
-          <div className="stat-label">Students</div>
-          <div className="stat-value stat-blue">{analytics?.studentsCount || 0}</div>
+      {view === "tasks" && (
+        <div className="review-banner">
+          <strong>{roleLabel} Dashboard</strong> | Assign tasks, review submissions,
+          grade students, and track progress across your permitted scope.
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Schools</div>
-          <div className="stat-value">{analytics?.schoolsCount || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Tasks</div>
-          <div className="stat-value">{analytics?.tasksCount || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Submitted</div>
-          <div className="stat-value stat-purple">{analytics?.submittedCount || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Avg Effective Progress</div>
-          <div className="stat-value stat-green">
-            {analytics?.avgEffectiveProgress || 0}%
+      )}
+
+      {view === "tasks" && (
+        <>
+          <div className="stats-bar stats-bar-teacher">
+            <div className="stat-card">
+              <div className="stat-label">Students</div>
+              <div className="stat-value stat-blue">{analytics?.studentsCount || 0}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Schools</div>
+              <div className="stat-value">{analytics?.schoolsCount || 0}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Tasks</div>
+              <div className="stat-value">{analytics?.tasksCount || 0}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Submitted</div>
+              <div className="stat-value stat-purple">{analytics?.submittedCount || 0}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Avg Effective Progress</div>
+              <div className="stat-value stat-green">
+                {analytics?.avgEffectiveProgress || 0}%
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="toolbar">
-        <div className="filter-wrap">
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="All">All Statuses</option>
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
+          <div className="toolbar">
+            <div className="filter-wrap">
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="All">All Statuses</option>
+                {STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
 
-          {isStateOrFederal && (
-            <select value={lgaFilter} onChange={(event) => setLgaFilter(event.target.value)}>
-              <option value="all">All LGAs</option>
-              {lgaOptions.map((lga) => (
-                <option key={lga} value={lga}>
-                  {lga}
-                </option>
-              ))}
-            </select>
-          )}
+              {isStateOrFederal && (
+                <select value={lgaFilter} onChange={(event) => setLgaFilter(event.target.value)}>
+                  <option value="all">All LGAs</option>
+                  {lgaOptions.map((lga) => (
+                    <option key={lga} value={lga}>
+                      {lga}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-          {!isSchoolRole && (
-            <select value={schoolFilter} onChange={(event) => setSchoolFilter(event.target.value)}>
-              <option value="all">All Schools</option>
-              {schools.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+              {!isSchoolRole && (
+                <select value={schoolFilter} onChange={(event) => setSchoolFilter(event.target.value)}>
+                  <option value="all">All Schools</option>
+                  {schools.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
-        <button className="btn btn-ghost" onClick={loadDashboard}>
-          Refresh
-        </button>
-        <button
-          className="btn btn-ghost"
-          onClick={() =>
-            exportTasksToCalendar(
-              visibleTasks.filter((task) => task.deadline),
-              `${user.role}-tasks.ics`
-            )
-          }
-        >
-          Export Calendar (.ics)
-        </button>
-      </div>
-
-      <div className="view-tabs" style={{ marginBottom: "0.8rem" }}>
-        <button
-          className={`view-tab ${view === "tasks" ? "active" : ""}`}
-          onClick={() => setView("tasks")}
-        >
-          Tasks
-        </button>
-        <button className="view-tab" onClick={onOpenCollab}>
-          Collab Hub
-        </button>
-        <button
-          className={`view-tab ${view === "fees" ? "active" : ""}`}
-          onClick={() => setView("fees")}
-        >
-          Fees
-        </button>
-        <button
-          className={`view-tab ${view === "market" ? "active" : ""}`}
-          onClick={() => setView("market")}
-        >
-          Marketplace
-        </button>
-      </div>
+            <button className="btn btn-ghost" onClick={loadDashboard}>
+              Refresh
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() =>
+                exportTasksToCalendar(
+                  visibleTasks.filter((task) => task.deadline),
+                  `${user.role}-tasks.ics`
+                )
+              }
+            >
+              Export Calendar (.ics)
+            </button>
+          </div>
+        </>
+      )}
 
       {view === "fees" ? (
         <FeesWorkspace user={user} />

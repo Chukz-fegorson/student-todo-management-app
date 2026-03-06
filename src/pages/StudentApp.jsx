@@ -173,6 +173,30 @@ export default function StudentApp({ user, onOpenCollab }) {
 
   return (
     <div className="main">
+      <div className="view-tabs module-tabs">
+        <button
+          className={`view-tab module-tab ${view === "tasks" ? "active" : ""}`}
+          onClick={() => setView("tasks")}
+        >
+          My Tasks
+        </button>
+        <button className="view-tab module-tab" onClick={onOpenCollab}>
+          Collab Hub
+        </button>
+        <button
+          className={`view-tab module-tab ${view === "fees" ? "active" : ""}`}
+          onClick={() => setView("fees")}
+        >
+          My Fees
+        </button>
+        <button
+          className={`view-tab module-tab ${view === "market" ? "active" : ""}`}
+          onClick={() => setView("market")}
+        >
+          Marketplace
+        </button>
+      </div>
+
       {notif && (
         <div className="notif-bar">
           <div className="notif notif-graded" onClick={() => setNotif("")}>
@@ -183,77 +207,57 @@ export default function StudentApp({ user, onOpenCollab }) {
 
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="stats-bar stats-bar-student">
-        <div className="stat-card">
-          <div className="stat-label">Total Tasks</div>
-          <div className="stat-value">{total}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Graded</div>
-          <div className="stat-value stat-green">{graded}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Submitted</div>
-          <div className="stat-value stat-purple">{submitted}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Average Progress</div>
-          <div className="stat-value stat-blue">{avgProgress}%</div>
-        </div>
-      </div>
+      {view === "tasks" && (
+        <>
+          <div className="stats-bar stats-bar-student">
+            <div className="stat-card">
+              <div className="stat-label">Total Tasks</div>
+              <div className="stat-value">{total}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Graded</div>
+              <div className="stat-value stat-green">{graded}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Submitted</div>
+              <div className="stat-value stat-purple">{submitted}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Average Progress</div>
+              <div className="stat-value stat-blue">{avgProgress}%</div>
+            </div>
+          </div>
 
-      <div className="toolbar">
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditing(null);
-            setShowModal(true);
-          }}
-        >
-          New Task
-        </button>
-        <button className="btn btn-ghost" onClick={loadTodos}>
-          Refresh
-        </button>
-        <button className="btn btn-ghost" onClick={enableNotifications}>
-          Enable Reminders
-        </button>
-        <button
-          className="btn btn-ghost"
-          onClick={() =>
-            exportTasksToCalendar(
-              todos.filter((todo) => todo.deadline),
-              `${user.name || "student"}-tasks.ics`
-            )
-          }
-        >
-          Export Calendar (.ics)
-        </button>
-      </div>
-
-      <div className="view-tabs" style={{ marginBottom: "0.8rem" }}>
-        <button
-          className={`view-tab ${view === "tasks" ? "active" : ""}`}
-          onClick={() => setView("tasks")}
-        >
-          My Tasks
-        </button>
-        <button className="view-tab" onClick={onOpenCollab}>
-          Collab Hub
-        </button>
-        <button
-          className={`view-tab ${view === "fees" ? "active" : ""}`}
-          onClick={() => setView("fees")}
-        >
-          My Fees
-        </button>
-        <button
-          className={`view-tab ${view === "market" ? "active" : ""}`}
-          onClick={() => setView("market")}
-        >
-          Marketplace
-        </button>
-      </div>
+          <div className="toolbar">
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setEditing(null);
+                setShowModal(true);
+              }}
+            >
+              New Task
+            </button>
+            <button className="btn btn-ghost" onClick={loadTodos}>
+              Refresh
+            </button>
+            <button className="btn btn-ghost" onClick={enableNotifications}>
+              Enable Reminders
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() =>
+                exportTasksToCalendar(
+                  todos.filter((todo) => todo.deadline),
+                  `${user.name || "student"}-tasks.ics`
+                )
+              }
+            >
+              Export Calendar (.ics)
+            </button>
+          </div>
+        </>
+      )}
 
       {view === "fees" ? (
         <FeesWorkspace user={user} />

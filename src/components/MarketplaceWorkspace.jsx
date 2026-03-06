@@ -65,6 +65,7 @@ export default function MarketplaceWorkspace({ user }) {
   });
   const [categoryRequestName, setCategoryRequestName] = useState("");
   const [claimCodes, setClaimCodes] = useState({});
+  const [marketView, setMarketView] = useState("browse");
 
   const [selectedProductId, setSelectedProductId] = useState("");
   const [detailMediaIndex, setDetailMediaIndex] = useState(0);
@@ -173,6 +174,11 @@ export default function MarketplaceWorkspace({ user }) {
   function closeProduct() {
     setSelectedProductId("");
     setDetailMediaIndex(0);
+  }
+
+  function switchMarketView(nextView) {
+    setMarketView(nextView);
+    if (nextView !== "browse") closeProduct();
   }
 
   function addMediaUrlDraft() {
@@ -447,7 +453,40 @@ export default function MarketplaceWorkspace({ user }) {
       )}
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="market-filter-bar">
+      <div className="view-tabs" style={{ marginBottom: "0.8rem" }}>
+        <button
+          className={`view-tab ${marketView === "browse" ? "active" : ""}`}
+          onClick={() => switchMarketView("browse")}
+        >
+          Browse
+        </button>
+        {canSell && (
+          <button
+            className={`view-tab ${marketView === "sell" ? "active" : ""}`}
+            onClick={() => switchMarketView("sell")}
+          >
+            Sell Item
+          </button>
+        )}
+        <button
+          className={`view-tab ${marketView === "orders" ? "active" : ""}`}
+          onClick={() => switchMarketView("orders")}
+        >
+          Orders
+        </button>
+        {canModerate && (
+          <button
+            className={`view-tab ${marketView === "moderation" ? "active" : ""}`}
+            onClick={() => switchMarketView("moderation")}
+          >
+            Moderation
+          </button>
+        )}
+      </div>
+
+      {marketView === "browse" && (
+        <>
+          <div className="market-filter-bar">
         <input
           placeholder="Search products"
           value={filtersDraft.q}
@@ -505,9 +544,11 @@ export default function MarketplaceWorkspace({ user }) {
         <button className="btn btn-ghost btn-sm" disabled={busy} onClick={resetFilters}>
           Reset
         </button>
-      </div>
+          </div>
+        </>
+      )}
 
-      {canSell && (
+      {marketView === "sell" && canSell && (
         <div className="panel" style={{ marginBottom: "1rem" }}>
           <div className="panel-subtitle">Create Listing ({listingType})</div>
           <div className="field">
@@ -629,7 +670,7 @@ export default function MarketplaceWorkspace({ user }) {
         </div>
       )}
 
-      {user.role === "student" && (
+      {marketView === "sell" && user.role === "student" && (
         <div className="panel" style={{ marginBottom: "1rem" }}>
           <div className="panel-subtitle">Request New Student Category</div>
           <div style={{ display: "flex", gap: "0.6rem" }}>
@@ -646,7 +687,7 @@ export default function MarketplaceWorkspace({ user }) {
         </div>
       )}
 
-      {canModerate && (
+      {marketView === "moderation" && canModerate && (
         <div className="panel" style={{ marginBottom: "1rem" }}>
           <div className="panel-subtitle">Pending Category Requests ({categoryRequests.length})</div>
           <div className="calendar-list">
@@ -682,8 +723,10 @@ export default function MarketplaceWorkspace({ user }) {
         </div>
       )}
 
-      <div className="panel-subtitle">Products ({products.length})</div>
-      <div className="market-grid">
+      {marketView === "browse" && (
+        <>
+          <div className="panel-subtitle">Products ({products.length})</div>
+          <div className="market-grid">
         {products.map((product) => {
           const mine = product.sellerUserId === user.id;
           const primary =
@@ -755,10 +798,14 @@ export default function MarketplaceWorkspace({ user }) {
             </article>
           );
         })}
-      </div>
-      {!products.length && <div className="empty-col">No products match your filter.</div>}
+          </div>
+          {!products.length && <div className="empty-col">No products match your filter.</div>}
+        </>
+      )}
 
-      <div style={{ marginTop: "1rem" }}>
+      {marketView === "orders" && (
+        <>
+          <div style={{ marginTop: "1rem" }}>
         <div className="panel-subtitle">Active Orders ({activeOrders.length})</div>
         <div className="calendar-list">
           {activeOrders.map((order) => {
@@ -829,39 +876,43 @@ export default function MarketplaceWorkspace({ user }) {
           })}
           {!activeOrders.length && <div className="empty-col">No active marketplace orders.</div>}
         </div>
-      </div>
+          </div>
 
-      <div style={{ marginTop: "1rem" }}>
-        <div className="panel-subtitle">Completed Transactions ({completedOrders.length})</div>
-        <div className="calendar-list">
-          {completedOrders.map((order) => (
-            <div key={order.id} className="review-card">
-              <div className="review-card-header">
-                <div>
-                  <div className="review-card-title">{order.productTitle || "Product"}</div>
-                  <div className="review-card-meta">
-                    Buyer: {order.buyerName || "Buyer"} | Seller: {order.sellerName || "Seller"} |
-                    Completed
+          <div style={{ marginTop: "1rem" }}>
+            <div className="panel-subtitle">Completed Transactions ({completedOrders.length})</div>
+            <div className="calendar-list">
+              {completedOrders.map((order) => (
+                <div key={order.id} className="review-card">
+                  <div className="review-card-header">
+                    <div>
+                      <div className="review-card-title">{order.productTitle || "Product"}</div>
+                      <div className="review-card-meta">
+                        Buyer: {order.buyerName || "Buyer"} | Seller: {order.sellerName || "Seller"} |
+                        Completed
+                      </div>
+                    </div>
+                    <div style={{ fontWeight: 700 }}>
+                      N{Number(order.totalAmountNaira || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="calendar-meta">
+                    Created: {formatDateTime(order.createdAt)}
+                    {order.cashConfirmedAt
+                      ? ` | Cash Confirmed: ${formatDateTime(order.cashConfirmedAt)}`
+                      : ""}
+                    {order.claimedAt ? ` | Completed: ${formatDateTime(order.claimedAt)}` : ""}
                   </div>
                 </div>
-                <div style={{ fontWeight: 700 }}>
-                  N{Number(order.totalAmountNaira || 0).toLocaleString()}
-                </div>
-              </div>
-              <div className="calendar-meta">
-                Created: {formatDateTime(order.createdAt)}
-                {order.cashConfirmedAt
-                  ? ` | Cash Confirmed: ${formatDateTime(order.cashConfirmedAt)}`
-                  : ""}
-                {order.claimedAt ? ` | Completed: ${formatDateTime(order.claimedAt)}` : ""}
-              </div>
+              ))}
+              {!completedOrders.length && (
+                <div className="empty-col">No completed transactions yet.</div>
+              )}
             </div>
-          ))}
-          {!completedOrders.length && <div className="empty-col">No completed transactions yet.</div>}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
-      {selectedProduct && (
+      {marketView === "browse" && selectedProduct && (
         <div
           className="modal-overlay"
           onClick={(event) => {

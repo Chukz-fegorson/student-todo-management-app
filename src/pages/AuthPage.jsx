@@ -15,6 +15,7 @@ export default function AuthPage({ onLogin }) {
   const [role, setRole] = useState("student");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [schools, setSchools] = useState([]);
   const [loadingSchools, setLoadingSchools] = useState(false);
@@ -31,6 +32,8 @@ export default function AuthPage({ onLogin }) {
     schoolSignupKey: "",
     stateSignupKey: "",
     federalSignupKey: "",
+    resetToken: "",
+    newPassword: "",
   });
 
   const email = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
@@ -58,9 +61,18 @@ export default function AuthPage({ onLogin }) {
     };
   }, [tab]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const resetToken = (params.get("resetToken") || "").trim();
+    if (!resetToken) return;
+    setTab("forgot");
+    setField("resetToken", resetToken);
+  }, []);
+
   async function login() {
     if (busy) return;
     setError("");
+    setInfo("");
 
     try {
       setBusy(true);
@@ -82,6 +94,7 @@ export default function AuthPage({ onLogin }) {
   async function register() {
     if (busy) return;
     setError("");
+    setInfo("");
 
     const payload = {
       role,
@@ -139,6 +152,64 @@ export default function AuthPage({ onLogin }) {
     }
   }
 
+  async function requestPasswordReset() {
+    if (busy) return;
+    setError("");
+    setInfo("");
+
+    if (!email) {
+      setError("Email is required.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      const data = await apiPost("/auth/forgot-password", { email });
+      setInfo(
+        data?.message ||
+          "If an account exists for that email, a reset token has been generated."
+      );
+      if (data?.debugResetToken) {
+        setField("resetToken", data.debugResetToken);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to request password reset.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword() {
+    if (busy) return;
+    setError("");
+    setInfo("");
+
+    const resetToken = form.resetToken.trim();
+    const nextPassword = form.newPassword.trim();
+
+    if (!resetToken || !nextPassword) {
+      setError("Reset token and new password are required.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      const data = await apiPost("/auth/reset-password", {
+        token: resetToken,
+        newPassword: nextPassword,
+      });
+      setInfo(data?.message || "Password reset successful. You can now sign in.");
+      setField("password", "");
+      setField("newPassword", "");
+      setField("resetToken", "");
+      setTab("login");
+    } catch (err) {
+      setError(err.message || "Failed to reset password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -153,6 +224,7 @@ export default function AuthPage({ onLogin }) {
             className={`auth-tab ${tab === "login" ? "active" : ""}`}
             onClick={() => {
               setError("");
+              setInfo("");
               setTab("login");
             }}
           >
@@ -163,10 +235,22 @@ export default function AuthPage({ onLogin }) {
             className={`auth-tab ${tab === "register" ? "active" : ""}`}
             onClick={() => {
               setError("");
+              setInfo("");
               setTab("register");
             }}
           >
             Register
+          </button>
+          <button
+            type="button"
+            className={`auth-tab ${tab === "forgot" ? "active" : ""}`}
+            onClick={() => {
+              setError("");
+              setInfo("");
+              setTab("forgot");
+            }}
+          >
+            Reset
           </button>
         </div>
 
@@ -330,54 +414,136 @@ export default function AuthPage({ onLogin }) {
         )}
 
         {error && <div className="error-msg">{error}</div>}
+        {info && <div className="info-msg">{info}</div>}
 
-        <div className="field">
-          <label>Email Address *</label>
-          <input
-            type="email"
-            placeholder="you@example.com"
-            value={form.email}
-            onChange={(event) => setField("email", event.target.value)}
-            autoComplete="email"
-          />
-        </div>
+        {tab === "forgot" ? (
+          <>
+            <div className="field">
+              <label>Email Address *</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(event) => setField("email", event.target.value)}
+                autoComplete="email"
+              />
+            </div>
 
-        <div className="field">
-          <label>Password *</label>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input
-              style={{ flex: 1 }}
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              value={form.password}
-              onChange={(event) => setField("password", event.target.value)}
-              autoComplete={tab === "login" ? "current-password" : "new-password"}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  if (tab === "login") login();
-                  else register();
-                }
-              }}
-            />
             <button
               type="button"
-              className="btn-icon"
-              title={showPassword ? "Hide password" : "Show password"}
-              onClick={() => setShowPassword((prev) => !prev)}
+              className="btn btn-ghost btn-full"
+              disabled={busy}
+              onClick={requestPasswordReset}
             >
-              {showPassword ? "Hide" : "Show"}
+              {busy ? "Please wait..." : "Generate Reset Token"}
             </button>
-          </div>
-        </div>
 
-        <button
-          type="button"
-          className="btn btn-primary btn-full"
-          disabled={busy}
-          onClick={tab === "login" ? login : register}
-        >
-          {busy ? "Please wait..." : tab === "login" ? "Sign In" : "Create Account"}
-        </button>
+            <div className="field">
+              <label>Reset Token *</label>
+              <input
+                placeholder="Paste reset token"
+                value={form.resetToken}
+                onChange={(event) => setField("resetToken", event.target.value)}
+              />
+            </div>
+
+            <div className="field">
+              <label>New Password *</label>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  style={{ flex: 1 }}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Set new password"
+                  value={form.newPassword}
+                  onChange={(event) => setField("newPassword", event.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="btn-icon"
+                  title={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-primary btn-full"
+              disabled={busy}
+              onClick={resetPassword}
+            >
+              {busy ? "Please wait..." : "Reset Password"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="field">
+              <label>Email Address *</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(event) => setField("email", event.target.value)}
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="field">
+              <label>Password *</label>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  style={{ flex: 1 }}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={form.password}
+                  onChange={(event) => setField("password", event.target.value)}
+                  autoComplete={tab === "login" ? "current-password" : "new-password"}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      if (tab === "login") login();
+                      else register();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-icon"
+                  title={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            {tab === "login" && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-full"
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setInfo("");
+                  setTab("forgot");
+                }}
+              >
+                Forgot Password?
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-primary btn-full"
+              disabled={busy}
+              onClick={tab === "login" ? login : register}
+            >
+              {busy ? "Please wait..." : tab === "login" ? "Sign In" : "Create Account"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

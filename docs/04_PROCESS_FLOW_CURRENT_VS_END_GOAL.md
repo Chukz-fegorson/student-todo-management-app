@@ -119,8 +119,22 @@ flowchart TD
 4. Add payment gateway integrations for online fee settlement and reconciliation.
 5. Build governance intelligence layer for state/federal KPI, risk alerts, and intervention workflows.
 
+## 5.1 Active Implementation Order (Locked)
+
+This is the active order being executed now:
+
+1. Reliability + audit trail foundation.
+2. Parent/guardian model for under-18 oversight.
+3. Fees payment UX hardening from student portal entry.
+4. Marketplace multi-mode payment flow + 2% platform charge accounting.
+5. Trust layer expansion (disputes + seller verification signals).
+6. Cross-role scorecards and operational metrics surfacing.
+
+Each step is implemented without removing current working flows.
+
+Execution status: completed for this cycle (March 6, 2026 baseline).
+
 ## 6. Product Positioning (Current Truth)
 
 StudyFlow is no longer only a student todo app.  
 It is currently an education operations platform with social and transaction foundations, and a clear path to super-app status.
-

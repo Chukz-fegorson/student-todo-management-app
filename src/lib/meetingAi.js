@@ -61,6 +61,7 @@ const STOP_WORDS = new Set([
   "your",
 ]);
 
+// Split long transcript text into sentence-like chunks.
 function splitSentences(text) {
   return String(text || "")
     .replace(/\s+/g, " ")
@@ -70,6 +71,7 @@ function splitSentences(text) {
 }
 
 function tokenize(text) {
+  // Turn text into useful words and drop noisy connector words.
   return String(text || "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -78,6 +80,7 @@ function tokenize(text) {
 }
 
 function sentenceScores(sentences) {
+  // Score sentences by word importance frequency.
   const frequency = new Map();
 
   for (const sentence of sentences) {
@@ -104,6 +107,7 @@ function normalizeBullet(value) {
 }
 
 function extractTodos(sentences) {
+  // Pull sentences that look like actions/next steps.
   const todoPattern =
     /\b(todo|action|follow up|next step|owner|assign|deadline|due|review|prepare|submit|deliver|implement)\b/i;
 
@@ -130,6 +134,7 @@ function extractActionPlan(todoItems) {
 }
 
 export function generateMeetingSummary(transcript) {
+  // Local, zero-cost summary generator used when external AI is not configured.
   const text = String(transcript || "").trim();
   if (!text) {
     return {

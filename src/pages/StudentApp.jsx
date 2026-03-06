@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDel, apiGet, apiPost, apiPut } from "../lib/api";
 import { exportTasksToCalendar } from "../lib/calendar";
 import {
@@ -16,9 +16,26 @@ import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import CollaborationHubModal from "../components/CollaborationHubModal";
 
+// We store reminder history in browser storage so we do not repeat the same alert forever.
 const REMINDER_SEEN_KEY = "reminders_seen";
 
+function isUnder18(dateValue) {
+  if (!dateValue) return false;
+  const dob = new Date(dateValue);
+  if (Number.isNaN(dob.getTime())) return false;
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dob.getUTCDate())) {
+    age -= 1;
+  }
+  return age < 18;
+}
+
+// StudentApp is the student's "home room":
+// tasks, collaboration, fees, and marketplace all live here as module tabs.
 export default function StudentApp({ user }) {
+  // Main task data + basic UX states.
   const [todos, setTodos] = useState([]);
   const [loadingTodos, setLoadingTodos] = useState(true);
   const [error, setError] = useState("");
@@ -27,9 +44,13 @@ export default function StudentApp({ user }) {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [parentReviews, setParentReviews] = useState([]);
+  const [parentLinkCode, setParentLinkCode] = useState("");
+  // Which module tab is currently open.
   const [view, setView] = useState("tasks");
 
   async function loadTodos() {
+    // Ask backend for this student's current tasks.
     try {
       setError("");
       setLoadingTodos(true);
@@ -42,11 +63,28 @@ export default function StudentApp({ user }) {
     }
   }
 
-  useEffect(() => {
-    loadTodos();
+  const loadParentData = useCallback(async () => {
+    try {
+      const [reviews, linkData] = await Promise.all([
+        apiGet(`/students/${user.id}/parent-reviews`),
+        apiGet("/parent/link-code").catch(() => null),
+      ]);
+      setParentReviews(Array.isArray(reviews) ? reviews : []);
+      setParentLinkCode(linkData?.linkCode || "");
+    } catch {
+      setParentReviews([]);
+      setParentLinkCode("");
+    }
   }, [user.id]);
 
   useEffect(() => {
+    // Load tasks whenever user identity changes.
+    loadTodos();
+    loadParentData();
+  }, [user.id, loadParentData]);
+
+  useEffect(() => {
+    // Every 30s, check deadlines and fire reminders when needed.
     const timer = window.setInterval(() => {
       const seen = storageGet(REMINDER_SEEN_KEY, {});
       let changed = false;
@@ -66,6 +104,7 @@ export default function StudentApp({ user }) {
           const trigger = dueMs - offset * 60 * 1000;
 
           if (nowMs >= trigger && nowMs < dueMs) {
+            // Mark reminder as seen so we don't re-announce same offset.
             seen[reminderKey] = nowMs;
             changed = true;
             latestMessage = `${todo.title} is due in ${offset} minute(s).`;
@@ -89,6 +128,7 @@ export default function StudentApp({ user }) {
   }, [todos]);
 
   async function enableNotifications() {
+    // Browser permission gate for local reminder popups.
     if (!window.Notification) {
       setNotif("This browser does not support notifications.");
       return;
@@ -106,6 +146,7 @@ export default function StudentApp({ user }) {
   }
 
   async function saveTodo(form) {
+    // One function handles both create and edit.
     try {
       setError("");
 
@@ -131,6 +172,7 @@ export default function StudentApp({ user }) {
   }
 
   async function deleteTodo() {
+    // Remove task in backend, then remove it from local list.
     if (!deleting) return;
     try {
       setError("");
@@ -143,6 +185,7 @@ export default function StudentApp({ user }) {
     }
   }
 
+  // Lightweight dashboard numbers.
   const total = todos.length;
   const submitted = todos.filter((todo) => todo.status === "Submitted").length;
   const graded = todos.filter((todo) => todo.status === "Graded").length;
@@ -152,6 +195,7 @@ export default function StudentApp({ user }) {
       )
     : 0;
 
+  // Build kanban columns from same task list.
   const columns = useMemo(
     () => ({
       Todo: todos.filter((todo) => todo.status === "Todo"),
@@ -162,6 +206,7 @@ export default function StudentApp({ user }) {
     [todos]
   );
 
+  // Show nearest deadlines first.
   const upcomingDeadlines = useMemo(() => {
     return todos
       .filter((todo) => parseDate(todo.deadline))
@@ -268,6 +313,7 @@ export default function StudentApp({ user }) {
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />
       ) : view === "collab" ? (
+        // Collab works as an in-page module (not popup) for smoother navigation.
         <CollaborationHubModal user={user} embedded />
       ) : loadingTodos ? (
         <div className="empty">
@@ -331,6 +377,37 @@ export default function StudentApp({ user }) {
             ) : (
               <div className="empty-col">No upcoming deadlines yet.</div>
             )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-title">Parent Review</div>
+            {isUnder18(user.dateOfBirth) && parentLinkCode && (
+              <div className="review-summary-box" style={{ marginBottom: "0.6rem" }}>
+                Parent Link Code: <strong>{parentLinkCode}</strong>
+                <div className="calendar-meta" style={{ marginTop: "0.35rem" }}>
+                  Share this code with your parent/guardian so they can link to your account.
+                </div>
+              </div>
+            )}
+            <div className="calendar-list">
+              {parentReviews.map((review) => (
+                <div key={review.id} className="review-card">
+                  <div className="review-card-header">
+                    <div className="review-card-title">{review.parentName || "Parent"}</div>
+                    <div className="calendar-meta">
+                      {review.rating} star{review.rating > 1 ? "s" : ""}
+                    </div>
+                  </div>
+                  <div className="review-summary-box">{review.reviewText}</div>
+                  <div className="calendar-meta">
+                    Updated: {formatDateTime(review.updatedAt)}
+                  </div>
+                </div>
+              ))}
+              {!parentReviews.length && (
+                <div className="empty-col">No parent reviews yet.</div>
+              )}
+            </div>
           </section>
         </div>
       )}

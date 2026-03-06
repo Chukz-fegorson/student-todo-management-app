@@ -7,6 +7,7 @@ import {
   getLgaOptionsForState,
 } from "../lib/locationData";
 
+// Convert uploaded profile image into preview-friendly data URL.
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -17,6 +18,7 @@ function fileToDataUrl(file) {
 }
 
 function initialForm(user) {
+  // Start form with user values so editing feels immediate.
   return {
     name: user?.name || "",
     email: user?.email || "",
@@ -31,23 +33,29 @@ function initialForm(user) {
     gender: user?.gender || "",
     addressLine: user?.addressLine || "",
     guardianName: user?.guardianName || "",
+    bankName: user?.bankName || "",
+    bankAccountName: user?.bankAccountName || "",
+    bankAccountNumber: user?.bankAccountNumber || "",
     currentPassword: "",
     newPassword: "",
   };
 }
 
 export default function AccountModal({ user, busy, error, onClose, onSave }) {
+  // Local form + helper states for account editing.
   const [form, setForm] = useState(() => initialForm(user));
   const [localError, setLocalError] = useState("");
   const [schools, setSchools] = useState([]);
   const [loadingSchools, setLoadingSchools] = useState(false);
 
   useEffect(() => {
+    // When user object changes, reset form to latest profile.
     setForm(initialForm(user));
     setLocalError("");
   }, [user]);
 
   useEffect(() => {
+    // Students can link school, so load school options for student role.
     let active = true;
 
     async function loadSchools() {
@@ -86,6 +94,7 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   function submit() {
+    // Build safe payload and enforce role-specific constraints.
     const payload = {
       name: form.name.trim(),
       email: form.email.trim().toLowerCase(),
@@ -96,6 +105,9 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
       gender: form.gender.trim() || null,
       addressLine: form.addressLine.trim() || null,
       guardianName: form.guardianName.trim() || null,
+      bankName: form.bankName.trim() || null,
+      bankAccountName: form.bankAccountName.trim() || null,
+      bankAccountNumber: form.bankAccountNumber.trim() || null,
       currentPassword: form.currentPassword,
       newPassword: form.newPassword,
     };
@@ -130,6 +142,7 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
   }
 
   async function handleAvatarFile(event) {
+    // Basic guardrails for image type and size before preview/save.
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -256,6 +269,34 @@ export default function AccountModal({ user, busy, error, onClose, onSave }) {
             value={form.addressLine}
             onChange={(event) => setField("addressLine", event.target.value)}
             placeholder="Home address"
+          />
+        </div>
+
+        <div className="panel-subtitle">Bank Details (for transfer/p2p payments)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <div className="field">
+            <label>Bank Name</label>
+            <input
+              value={form.bankName}
+              onChange={(event) => setField("bankName", event.target.value)}
+              placeholder="e.g. GTBank"
+            />
+          </div>
+          <div className="field">
+            <label>Account Name</label>
+            <input
+              value={form.bankAccountName}
+              onChange={(event) => setField("bankAccountName", event.target.value)}
+              placeholder="Account holder name"
+            />
+          </div>
+        </div>
+        <div className="field">
+          <label>Account Number</label>
+          <input
+            value={form.bankAccountNumber}
+            onChange={(event) => setField("bankAccountNumber", event.target.value)}
+            placeholder="0123456789"
           />
         </div>
 

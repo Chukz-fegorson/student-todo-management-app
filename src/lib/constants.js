@@ -13,10 +13,11 @@ export const STATUSES = ["Todo", "In Progress", "Submitted", "Graded"];
 export const EDITABLE_STATUSES = ["Todo", "In Progress", "Submitted"];
 export const GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F"];
 
-export const ROLES = ["student", "school", "state", "federal"];
+export const ROLES = ["student", "parent", "school", "state", "federal"];
 
 export const ROLE_LABELS = {
   student: "Student",
+  parent: "Parent / Guardian",
   school: "School / Teacher",
   state: "State Ministry",
   federal: "Federal Ministry",

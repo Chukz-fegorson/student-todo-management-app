@@ -4,6 +4,7 @@ import { formatDateTime } from "../lib/helpers";
 
 const REACTIONS = ["like", "love", "insightful", "support"];
 
+// Community feed is the social discussion board inside StudyFlow.
 export default function CommunityFeedPanel({ user }) {
   const [posts, setPosts] = useState([]);
   const [commentsByPost, setCommentsByPost] = useState({});
@@ -34,6 +35,7 @@ export default function CommunityFeedPanel({ user }) {
   );
 
   const loadPosts = useCallback(async () => {
+    // Fetch newest visible posts in this user's scope.
     try {
       setLoading(true);
       setError("");
@@ -71,6 +73,7 @@ export default function CommunityFeedPanel({ user }) {
   }, [activePostId, loadComments]);
 
   async function createPost() {
+    // Publish new community conversation.
     if (!postForm.title.trim() || !postForm.body.trim()) {
       setError("Post title and body are required.");
       return;
@@ -96,6 +99,7 @@ export default function CommunityFeedPanel({ user }) {
   }
 
   async function reactToPost(postId, reaction) {
+    // Upsert reaction to a post.
     try {
       setBusy(true);
       setError("");

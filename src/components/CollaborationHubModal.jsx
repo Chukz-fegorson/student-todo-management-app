@@ -6,6 +6,7 @@ import { generateMeetingSummary } from "../lib/meetingAi";
 import { ROLE_LABELS } from "../lib/constants";
 import CommunityFeedPanel from "./CommunityFeedPanel";
 
+// Build a meeting draft with a safe default time (1 hour from now).
 function defaultMeetingForm() {
   const oneHourAhead = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   return {
@@ -35,6 +36,7 @@ function defaultFollowUpDueFromMeeting(meeting) {
 }
 
 function summaryTodosToCalendarEvents(todoItems, meeting) {
+  // Convert accepted AI todo strings into calendar-ready task events.
   const todos = Array.isArray(todoItems) ? todoItems : [];
   const baseIso = defaultFollowUpDueFromMeeting(meeting);
   const base = parseDate(baseIso) || new Date();
@@ -57,6 +59,7 @@ function summaryTodosToCalendarEvents(todoItems, meeting) {
 }
 
 function userMatchesSearch(user, query) {
+  // Simple fuzzy search across name/email/role/location labels.
   const text = String(query || "").trim().toLowerCase();
   if (!text) return true;
 
@@ -113,6 +116,7 @@ function isTranscriptLikeFile(file) {
 }
 
 export default function CollaborationHubModal({ user, onClose, embedded = false }) {
+  // Three collab mini-modules in one place: chat, meetings, and community feed.
   const [tab, setTab] = useState("chat");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -223,6 +227,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     callSession.meetingId === activeMeeting.id;
 
   function stopLiveTranscript() {
+    // Stop browser speech recognition cleanly.
     const recognition = recognitionRef.current;
     if (!recognition) return;
 
@@ -235,6 +240,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   function startLiveTranscript(options = {}) {
+    // Start browser speech recognition and append final transcript chunks.
     const reset = Boolean(options.reset);
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -294,6 +300,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   const loadDirectory = useCallback(async () => {
+    // Load people the current user can talk to (scope-aware).
     try {
       setDirectoryLoading(true);
       const data = await apiGet("/directory/users");
@@ -343,6 +350,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }, []);
 
   const loadMeetings = useCallback(async () => {
+    // Fetch meeting list for this user.
     try {
       const data = await apiGet("/meetings");
       setMeetings(Array.isArray(data) ? data : []);
@@ -352,6 +360,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }, []);
 
   const loadActionItems = useCallback(async () => {
+    // Load user todo items generated from meeting summaries.
     try {
       setLoadingActionItems(true);
       const data = await apiGet("/action-items");
@@ -364,6 +373,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }, []);
 
   async function openMeeting(meetingId) {
+    // Open one meeting and hydrate transcript/report details.
     if (!meetingId) return;
     if (callSession.active && callSession.meetingId !== meetingId) {
       setNotice("End the active call before switching to another meeting.");
@@ -394,6 +404,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function sendDirectMessage(event) {
+    // 1-to-1 message send.
     event.preventDefault();
     if (!selectedChatUserId || !chatText.trim()) return;
 
@@ -414,6 +425,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function sendBroadcastMessage() {
+    // One message to many selected recipients.
     if (!broadcastRecipients.length || !broadcastText.trim()) return;
 
     try {
@@ -433,6 +445,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function createMeeting(event) {
+    // Create meeting, reset draft, and export calendar invite.
     event.preventDefault();
     if (!meetingForm.title.trim()) {
       setError("Meeting title is required.");
@@ -474,6 +487,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function persistMeetingNotesReport(meetingId, transcript, summary, successMessage) {
+    // Persist transcript + summary to meeting record on backend.
     const updated = await apiPut(`/meetings/${meetingId}/notes`, {
       transcript,
       summary,
@@ -487,6 +501,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function startMeetingCall(meeting) {
+    // Mark meeting joined, open call context, and optionally start live transcript.
     if (!meeting) return;
     if (callSession.active && callSession.meetingId !== meeting.id) {
       setNotice("End the active call before starting another one.");
@@ -524,6 +539,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function endMeetingCall(options = {}) {
+    // Finalize call, generate summary (if transcript exists), and save report.
     if (!callSession.active || !callSession.meetingId) return;
 
     const {
@@ -599,6 +615,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function saveMeetingNotes() {
+    // Manual save for transcript/summary outside active call end event.
     if (!activeMeetingId) return;
     if (callSession.active && callSession.meetingId === activeMeetingId) {
       setError("End the call first to publish the final meeting report.");
@@ -721,6 +738,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function addSummaryTodosToActionList() {
+    // Turn accepted suggestions into personal action items + optional tasks.
     if (!activeMeetingId) return;
 
     const todos = acceptedSummaryTodos.filter(Boolean);
@@ -805,6 +823,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   function planFollowUpMeetingFromSummary() {
+    // Pre-fill create-meeting form using accepted summary action points.
     if (!activeMeeting) return;
     const todos = acceptedSummaryTodos.filter(Boolean);
     if (!todos.length) {
@@ -846,6 +865,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   async function toggleActionItem(item) {
+    // Toggle personal action status between Todo and Done.
     if (!item) return;
     const nextStatus = item.status === "Done" ? "Todo" : "Done";
     try {
@@ -946,6 +966,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }, [tab, loadActionItems]);
 
   async function handleCloseHub() {
+    // If call is still running, safely stop and save before closing.
     if (callSession.active) {
       await endMeetingCall({
         save: true,

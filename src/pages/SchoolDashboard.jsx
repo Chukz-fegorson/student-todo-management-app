@@ -23,6 +23,7 @@ import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import CollaborationHubModal from "../components/CollaborationHubModal";
 
+// Default shape for "assign task" form.
 const assignmentDefaults = {
   title: "",
   description: "",
@@ -36,20 +37,25 @@ const assignmentDefaults = {
 };
 
 function toggleId(arr, id) {
+  // Tiny helper: select/unselect student IDs.
   return arr.includes(id) ? arr.filter((entry) => entry !== id) : [...arr, id];
 }
 
 function matchesFilters(item, lgaFilter, schoolFilter) {
+  // Scope filter used for students/tasks in state/federal views.
   const lgaMatch = lgaFilter === "all" || (item.lgaName || "").toLowerCase() === lgaFilter;
   const schoolMatch = schoolFilter === "all" || item.schoolId === schoolFilter;
   return lgaMatch && schoolMatch;
 }
 
+// This dashboard is used by school, state, and federal roles.
+// It adapts behavior based on scope and permissions.
 function SchoolDashboard({ user }) {
   const [students, setStudents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [schools, setSchools] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [scorecard, setScorecard] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,21 +75,25 @@ function SchoolDashboard({ user }) {
   const isStateOrFederal = user.role === "state" || user.role === "federal";
 
   async function loadDashboard() {
+    // Pull all datasets needed for assignment/review in one round trip.
     try {
       setError("");
       setLoading(true);
 
-      const [studentsData, tasksData, schoolsData, analyticsData] = await Promise.all([
+      const [studentsData, tasksData, schoolsData, analyticsData, scorecardData] =
+        await Promise.all([
         apiGet("/students"),
         apiGet("/tasks"),
         apiGet("/schools"),
         apiGet("/analytics/overview"),
+        apiGet("/analytics/scorecard"),
       ]);
 
       setStudents(Array.isArray(studentsData) ? studentsData : []);
       setTasks(Array.isArray(tasksData) ? tasksData : []);
       setSchools(Array.isArray(schoolsData) ? schoolsData : []);
       setAnalytics(analyticsData || null);
+      setScorecard(scorecardData || null);
     } catch (err) {
       setError(err.message || "Failed to load dashboard data.");
     } finally {
@@ -92,6 +102,7 @@ function SchoolDashboard({ user }) {
   }
 
   useEffect(() => {
+    // Reload when actor changes.
     loadDashboard();
   }, [user.id]);
 
@@ -104,6 +115,7 @@ function SchoolDashboard({ user }) {
   }, [schools]);
 
   const visibleStudents = useMemo(() => {
+    // Students currently visible under active filters.
     return students.filter((student) => matchesFilters(student, lgaFilter, schoolFilter));
   }, [students, lgaFilter, schoolFilter]);
 
@@ -130,6 +142,7 @@ function SchoolDashboard({ user }) {
   ).length;
 
   async function assignTask() {
+    // Guardrails first, then submit assignment payload.
     if (!assignment.title.trim()) {
       setError("Task title is required.");
       return;
@@ -170,6 +183,7 @@ function SchoolDashboard({ user }) {
   }
 
   async function handleGrade({ grade, gradeFeedback }) {
+    // Save grade + feedback for submitted work.
     if (!gradeModal) return;
 
     try {
@@ -273,6 +287,53 @@ function SchoolDashboard({ user }) {
             </div>
           </div>
 
+          <div className="stats-bar stats-bar-student" style={{ marginBottom: "1.2rem" }}>
+            <div className="stat-card">
+              <div className="stat-label">Fee Paid Rate</div>
+              <div className="stat-value stat-blue">
+                {scorecard?.feeMetrics?.paidRate || 0}%
+              </div>
+              <div className="stat-sub">
+                N
+                {Number(
+                  scorecard?.feeMetrics?.paidAmountNaira || 0
+                ).toLocaleString()}{" "}
+                paid
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Market Completion</div>
+              <div className="stat-value stat-green">
+                {scorecard?.marketMetrics?.completionRate || 0}%
+              </div>
+              <div className="stat-sub">
+                {scorecard?.marketMetrics?.ordersCompleted || 0}/
+                {scorecard?.marketMetrics?.ordersTotal || 0} orders
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Platform Revenue</div>
+              <div className="stat-value stat-purple">
+                N
+                {Number(
+                  scorecard?.marketMetrics?.platformRevenueNaira || 0
+                ).toLocaleString()}
+              </div>
+              <div className="stat-sub">
+                Window: {scorecard?.windowDays || 30} days
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Open Disputes</div>
+              <div className="stat-value stat-amber">
+                {scorecard?.disputeMetrics?.openDisputes || 0}
+              </div>
+              <div className="stat-sub">
+                Total: {scorecard?.disputeMetrics?.totalDisputes || 0}
+              </div>
+            </div>
+          </div>
+
           <div className="toolbar">
             <div className="filter-wrap">
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -330,6 +391,7 @@ function SchoolDashboard({ user }) {
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />
       ) : view === "collab" ? (
+        // Shared collab module for school/governance users.
         <CollaborationHubModal user={user} embedded />
       ) : (
         <>

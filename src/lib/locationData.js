@@ -1,3 +1,4 @@
+// Shared location/gender options used by auth and profile forms.
 export const NIGERIA_STATES = [
   "Abia",
   "Adamawa",
@@ -50,6 +51,7 @@ function normalizeKey(value) {
 }
 
 export function buildStateLgaIndex(rows = []) {
+  // Turn flat rows into fast state -> LGAs lookup map.
   const byState = new Map();
   for (const row of rows) {
     const stateName = String(row?.stateName || "").trim();
@@ -63,6 +65,7 @@ export function buildStateLgaIndex(rows = []) {
 }
 
 export function getLgaOptionsForState(index, stateName, extraValues = []) {
+  // Return sorted LGA options for currently selected state.
   const key = normalizeKey(stateName);
   const options = index?.get(key) ? Array.from(index.get(key)) : [];
   for (const extra of extraValues) {

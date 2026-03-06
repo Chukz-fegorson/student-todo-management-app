@@ -120,3 +120,35 @@ When a change request arrives, this sequence is followed:
 - core flows are integrated end-to-end across roles
 - documentation trail now exists for onboarding contributors and stakeholders
 
+## 8. Ordered Execution Plan (Current Cycle)
+
+The current implementation cycle follows this strict order:
+
+1. reliability hardening and audit event trail
+2. parent/guardian access for under-18 students
+3. fees UX flow refinement from student "Pay Fees" entry
+4. marketplace payment-mode expansion with 2% platform charge
+5. trust and safety upgrades (disputes + verification)
+6. ministry/state/school scorecards and business metrics
+
+### 8.1 Delivery Rules For This Cycle
+
+- each phase ships backend + frontend changes together
+- schema additions are backward-safe (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ... IF NOT EXISTS`)
+- existing role and scope boundaries remain intact
+- every phase adds at least one observable UI/API signal for verification
+
+### 8.2 Phase Targets
+
+- phase 1 target:
+  add `sf_audit_events` and log sensitive lifecycle events (implemented)
+- phase 2 target:
+  introduce `parent` role and parent-child linkage model (implemented)
+- phase 3 target:
+  student starts fees flow through explicit "Pay Fees" action and option selection (implemented)
+- phase 4 target:
+  support `cash`, `p2p`, `transfer` order modes with claim-code completion and platform fee accounting (implemented)
+- phase 5 target:
+  add dispute records and verification signals to moderation/trust workflows (implemented)
+- phase 6 target:
+  expose KPI endpoints/cards for operational and governance reporting (implemented)

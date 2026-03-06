@@ -16,6 +16,31 @@ function fileToDataUrl(file) {
   });
 }
 
+function downloadPaymentReceipt(payment) {
+  const lines = [
+    "StudyFlow Fee Receipt",
+    "---------------------",
+    `Invoice: ${payment.invoiceTitle || payment.paidForLabel || "School fees"}`,
+    `Student: ${payment.studentName || "Student"}`,
+    `School: ${payment.schoolName || "School"}`,
+    `Amount (NGN): ${Number(payment.amountNaira || 0).toLocaleString()}`,
+    `Status: ${payment.status || "N/A"}`,
+    `Payment Method: ${payment.paymentMethod || "transfer"}`,
+    `Transaction Ref: ${payment.transactionReference || "N/A"}`,
+    `School Receipt No: ${payment.schoolReceiptNo || "Pending"}`,
+    `Receipt Issued At: ${payment.schoolReceiptIssuedAt || "Pending"}`,
+  ];
+  const blob = new Blob([`${lines.join("\n")}\n`], { type: "text/plain;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `studyflow-fee-receipt-${String(payment.id || "payment").slice(0, 8)}.txt`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function FeesWorkspace({ user }) {
   const [plans, setPlans] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -89,7 +114,10 @@ export default function FeesWorkspace({ user }) {
     const existing = paymentDrafts[invoice.id];
     if (existing) return existing;
     return {
+      open: false,
       paidForLabel: invoice.title || "School fees",
+      paymentMethod: "transfer",
+      transactionReference: "",
       receiptMedia: [],
       receiptUrlDraft: "",
       notes: "",
@@ -99,7 +127,10 @@ export default function FeesWorkspace({ user }) {
   function updatePaymentDraft(invoiceId, patch) {
     setPaymentDrafts((prev) => {
       const current = prev[invoiceId] || {
+        open: false,
         paidForLabel: "",
+        paymentMethod: "transfer",
+        transactionReference: "",
         receiptMedia: [],
         receiptUrlDraft: "",
         notes: "",
@@ -249,13 +280,15 @@ export default function FeesWorkspace({ user }) {
     const invoice = invoices.find((entry) => entry.id === invoiceId);
     const draft = getPaymentDraft(invoice || { id: invoiceId, title: "" });
     const paidForLabel = String(draft.paidForLabel || "").trim();
+    const paymentMethod = String(draft.paymentMethod || "transfer").trim();
+    const transactionReference = String(draft.transactionReference || "").trim();
     const notes = String(draft.notes || "").trim();
 
     if (!paidForLabel) {
       setError("Tell the school what this payment is for.");
       return;
     }
-    if (!draft.receiptMedia.length) {
+    if (paymentMethod !== "on_platform" && !draft.receiptMedia.length) {
       setError(
         "Upload receipt image/video (or add URL) before sending for confirmation."
       );
@@ -267,6 +300,8 @@ export default function FeesWorkspace({ user }) {
       setError("");
       const payment = await apiPost(`/fees/invoices/${invoiceId}/mark-paid`, {
         paidForLabel,
+        paymentMethod,
+        transactionReference: transactionReference || null,
         receiptMedia: draft.receiptMedia,
         notes: notes || null,
       });
@@ -482,78 +517,141 @@ export default function FeesWorkspace({ user }) {
               </div>
               {isStudent && invoice.status === "Unpaid" && (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>
-                  <input
-                    placeholder="Paid for (e.g. Tuition, Bus fee, Hostel)"
-                    value={getPaymentDraft(invoice).paidForLabel}
-                    onChange={(event) =>
-                      updatePaymentDraft(invoice.id, {
-                        paidForLabel: event.target.value,
-                      })
-                    }
-                  />
-                  <textarea
-                    placeholder="Optional notes for school cashier..."
-                    value={getPaymentDraft(invoice).notes}
-                    onChange={(event) =>
-                      updatePaymentDraft(invoice.id, { notes: event.target.value })
-                    }
-                  />
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer" }}>
-                      Upload Receipt
-                      <input
-                        type="file"
-                        accept="image/*,video/*"
-                        multiple
-                        style={{ display: "none" }}
-                        onChange={(event) => addReceiptFiles(invoice.id, event)}
-                      />
-                    </label>
-                    <input
-                      style={{ flex: 1, minWidth: "220px" }}
-                      placeholder="Or paste receipt URL"
-                      value={getPaymentDraft(invoice).receiptUrlDraft}
-                      onChange={(event) =>
-                        updatePaymentDraft(invoice.id, {
-                          receiptUrlDraft: event.target.value,
-                        })
-                      }
-                    />
+                  {!getPaymentDraft(invoice).open ? (
                     <button
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-primary btn-sm"
                       type="button"
-                      onClick={() => addReceiptUrl(invoice.id)}
+                      onClick={() => updatePaymentDraft(invoice.id, { open: true })}
                     >
-                      Add URL
+                      Pay Fees
                     </button>
-                  </div>
-                  {!!getPaymentDraft(invoice).receiptMedia.length && (
-                    <div className="market-media-grid">
-                      {getPaymentDraft(invoice).receiptMedia.map((entry) => (
-                        <div key={entry.id} className="market-media-item">
-                          {String(entry.kind || "").toLowerCase() === "video" ? (
-                            <video src={entry.url} controls preload="metadata" />
-                          ) : (
-                            <img src={entry.url} alt={entry.name || "Receipt"} />
+                  ) : (
+                    <>
+                      <input
+                        placeholder="Paid for (e.g. Tuition, Bus fee, Hostel)"
+                        value={getPaymentDraft(invoice).paidForLabel}
+                        onChange={(event) =>
+                          updatePaymentDraft(invoice.id, {
+                            paidForLabel: event.target.value,
+                          })
+                        }
+                      />
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "0.45rem",
+                          gridTemplateColumns: "1fr 1fr",
+                        }}
+                      >
+                        <select
+                          value={getPaymentDraft(invoice).paymentMethod}
+                          onChange={(event) =>
+                            updatePaymentDraft(invoice.id, {
+                              paymentMethod: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="transfer">Transfer</option>
+                          <option value="cash">Cash</option>
+                          <option value="on_platform">On-platform (simulated)</option>
+                        </select>
+                        <input
+                          placeholder="Transaction Ref (optional)"
+                          value={getPaymentDraft(invoice).transactionReference}
+                          onChange={(event) =>
+                            updatePaymentDraft(invoice.id, {
+                              transactionReference: event.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <textarea
+                        placeholder="Optional notes for school cashier..."
+                        value={getPaymentDraft(invoice).notes}
+                        onChange={(event) =>
+                          updatePaymentDraft(invoice.id, { notes: event.target.value })
+                        }
+                      />
+                      {getPaymentDraft(invoice).paymentMethod !== "on_platform" && (
+                        <>
+                          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                            <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer" }}>
+                              Upload Receipt
+                              <input
+                                type="file"
+                                accept="image/*,video/*"
+                                multiple
+                                style={{ display: "none" }}
+                                onChange={(event) => addReceiptFiles(invoice.id, event)}
+                              />
+                            </label>
+                            <input
+                              style={{ flex: 1, minWidth: "220px" }}
+                              placeholder="Or paste receipt URL"
+                              value={getPaymentDraft(invoice).receiptUrlDraft}
+                              onChange={(event) =>
+                                updatePaymentDraft(invoice.id, {
+                                  receiptUrlDraft: event.target.value,
+                                })
+                              }
+                            />
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              onClick={() => addReceiptUrl(invoice.id)}
+                            >
+                              Add URL
+                            </button>
+                          </div>
+                          {!!getPaymentDraft(invoice).receiptMedia.length && (
+                            <div className="market-media-grid">
+                              {getPaymentDraft(invoice).receiptMedia.map((entry) => (
+                                <div key={entry.id} className="market-media-item">
+                                  {String(entry.kind || "").toLowerCase() === "video" ? (
+                                    <video src={entry.url} controls preload="metadata" />
+                                  ) : (
+                                    <img src={entry.url} alt={entry.name || "Receipt"} />
+                                  )}
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    type="button"
+                                    onClick={() => removeReceiptMedia(invoice.id, entry.id)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            type="button"
-                            onClick={() => removeReceiptMedia(invoice.id, entry.id)}
-                          >
-                            Remove
-                          </button>
+                        </>
+                      )}
+                      {getPaymentDraft(invoice).paymentMethod === "on_platform" && (
+                        <div className="panel-hint">
+                          On-platform simulation selected. Receipt media is optional.
                         </div>
-                      ))}
-                    </div>
+                      )}
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy}
+                          onClick={() => markInvoicePaid(invoice.id)}
+                        >
+                          Submit Payment
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          type="button"
+                          onClick={() =>
+                            updatePaymentDraft(invoice.id, {
+                              open: false,
+                            })
+                          }
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
                   )}
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    disabled={busy}
-                    onClick={() => markInvoicePaid(invoice.id)}
-                  >
-                    Submit Receipt To School
-                  </button>
                 </div>
               )}
             </div>
@@ -584,6 +682,12 @@ export default function FeesWorkspace({ user }) {
                   </div>
                   <div className="calendar-meta">
                     Paid for: {payment.paidForLabel || payment.invoiceTitle || "School fees"}
+                  </div>
+                  <div className="calendar-meta">
+                    Method: {payment.paymentMethod || "transfer"}
+                    {payment.transactionReference
+                      ? ` | Ref: ${payment.transactionReference}`
+                      : ""}
                   </div>
                   {payment.notes && <div className="calendar-meta">Student note: {payment.notes}</div>}
                 </div>
@@ -651,6 +755,10 @@ export default function FeesWorkspace({ user }) {
               <div className="calendar-meta">
                 Submitted: {payment.studentMarkedAt ? formatDateTime(payment.studentMarkedAt) : "N/A"}
               </div>
+              <div className="calendar-meta">
+                Method: {payment.paymentMethod || "transfer"}
+                {payment.transactionReference ? ` | Ref: ${payment.transactionReference}` : ""}
+              </div>
               {!!payment.schoolReceiptNo && (
                 <div className="calendar-meta">
                   School Receipt: {payment.schoolReceiptNo}
@@ -659,9 +767,34 @@ export default function FeesWorkspace({ user }) {
                     : ""}
                 </div>
               )}
+              {!!payment.receiptMedia?.length && (
+                <div className="market-media-grid">
+                  {payment.receiptMedia.map((entry) => (
+                    <div key={entry.id} className="market-media-item">
+                      {String(entry.kind || "").toLowerCase() === "video" ? (
+                        <video src={entry.url} controls preload="metadata" />
+                      ) : (
+                        <img src={entry.url} alt={entry.name || "Receipt evidence"} />
+                      )}
+                      <a className="btn btn-ghost btn-sm" href={entry.url} download>
+                        Download
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
               {!!payment.schoolReceiptNote && (
                 <div className="review-summary-box">{payment.schoolReceiptNote}</div>
               )}
+              <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.45rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => downloadPaymentReceipt(payment)}
+                >
+                  Download Receipt
+                </button>
+              </div>
             </div>
           ))}
           {!recentPayments.length && (

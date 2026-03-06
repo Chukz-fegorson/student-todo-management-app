@@ -20,9 +20,14 @@
   .auth-tab { flex: 1; padding: 0.6rem; border: none; border-radius: 7px; cursor: pointer; font-family: var(--font); font-size: 0.9rem; font-weight: 500; background: transparent; color: var(--muted); transition: all .2s; }
   .auth-tab.active { background: var(--accent); color: #fff; }
   .role-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.25rem; }
+  .role-selector-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .role-btn { padding: 0.75rem; border: 2px solid var(--border); border-radius: 10px; background: transparent; color: var(--muted); font-family: var(--font); font-size: 0.88rem; font-weight: 500; cursor: pointer; text-align: center; transition: all .2s; }
   .role-btn:hover { border-color: var(--accent); color: var(--text); }
   .role-btn.active { border-color: var(--accent); background: rgba(79,142,247,0.1); color: var(--accent); }
+
+  @media (max-width: 700px) {
+    .role-selector-5 { grid-template-columns: 1fr 1fr; }
+  }
 
   .field { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
   .field label { font-size: 0.8rem; font-weight: 500; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
@@ -244,6 +249,8 @@
 
   .student-picker { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); background: var(--surface2); border-radius: 10px; padding: 0.5rem; margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.45rem; }
   .student-pick-row { display: flex; gap: 0.45rem; align-items: flex-start; font-size: 0.82rem; color: var(--text); }
+  button.student-pick-row { width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 0.45rem; cursor: pointer; }
+  .student-pick-row-active { border-color: var(--accent) !important; background: rgba(63, 183, 255, 0.08) !important; }
 
   .lga-group { margin-top: 0.6rem; border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; background: var(--surface2); }
   .lga-title { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.86rem; }

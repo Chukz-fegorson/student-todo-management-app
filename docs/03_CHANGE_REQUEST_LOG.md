@@ -11,6 +11,7 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 
 - `Implemented`: delivered in current codebase
 - `Partially Implemented`: foundation exists, full scope pending
+- `In Progress`: accepted and currently being implemented
 - `Planned`: accepted but not yet implemented
 
 ## 3. Change Requests (Chronological by Phase)
@@ -50,6 +51,12 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-031 | Strategic | Add wallet-backed auctions and bidding | Planned | not yet in backend domain model |
 | CR-032 | Strategic | Integrate external ChatGPT/Whisper APIs | Planned | current version uses local, zero-cost summarizer |
 | CR-033 | Strategic | Expand social graph to Slack/Twitter-like streams | Partially Implemented | community feed baseline exists; advanced threads pending |
+| CR-034 | Reliability | Add audit event trail across auth/fees/marketplace lifecycle | Implemented | `sf_audit_events` schema + route-level audit hooks + `/audit/events` |
+| CR-035 | Governance | Add parent role and under-18 parent review linkage | Implemented | parent role, child link code flow, parent dashboard, parent review APIs |
+| CR-036 | Fees UX | Move payment initiation to explicit student "Pay Fees" flow | Implemented | student pay-action UX, method selection, receipt handling, receipt download |
+| CR-037 | Commerce | Add marketplace payment modes + 2% platform charge accounting | Implemented | order model expanded with mode + platform fee + seller net + bank details |
+| CR-038 | Trust | Add disputes and verification indicators in marketplace safety pipeline | Implemented | dispute APIs/workflow + seller identity verification controls |
+| CR-039 | Analytics | Add role-aware business scorecards and operations metrics | Implemented | `/analytics/scorecard` endpoint + dashboard KPI cards |
 
 ## 4. Key Technical Change Highlights
 
@@ -61,4 +68,3 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 ## 5. Audit Note
 
 This log is based on implemented functionality present in the current codebase and delivery history from project iteration records.
-

@@ -10,11 +10,14 @@ import { setSession } from "../lib/storage";
 
 const roleOptions = [
   { id: "student", label: ROLE_LABELS.student },
+  { id: "parent", label: ROLE_LABELS.parent },
   { id: "school", label: ROLE_LABELS.school },
   { id: "state", label: ROLE_LABELS.state },
   { id: "federal", label: ROLE_LABELS.federal },
 ];
 
+// AuthPage is the front door:
+// sign in, register, and password reset live in one place.
 export default function AuthPage({ onLogin }) {
   const [tab, setTab] = useState("login");
   const [role, setRole] = useState("student");
@@ -37,11 +40,15 @@ export default function AuthPage({ onLogin }) {
     schoolSignupKey: "",
     stateSignupKey: "",
     federalSignupKey: "",
+    childEmail: "",
+    childLinkCode: "",
+    relationshipLabel: "",
     resetToken: "",
     newPassword: "",
   });
 
   const email = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
+  // Build state->LGA options from known schools so dropdowns stay contextual.
   const stateLgaIndex = useMemo(() => buildStateLgaIndex(schools), [schools]);
   const lgaOptions = useMemo(
     () => getLgaOptionsForState(stateLgaIndex, form.stateName, [form.lgaName]),
@@ -50,6 +57,7 @@ export default function AuthPage({ onLogin }) {
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
+    // Load school list only when register tab is open.
     let active = true;
 
     async function loadSchools() {
@@ -80,6 +88,7 @@ export default function AuthPage({ onLogin }) {
   }, []);
 
   async function login() {
+    // Authenticate and store token+session on success.
     if (busy) return;
     setError("");
     setInfo("");
@@ -102,6 +111,7 @@ export default function AuthPage({ onLogin }) {
   }
 
   async function register() {
+    // Create user account with role-aware required fields.
     if (busy) return;
     setError("");
     setInfo("");
@@ -119,6 +129,9 @@ export default function AuthPage({ onLogin }) {
       schoolSignupKey: form.schoolSignupKey.trim() || null,
       stateSignupKey: form.stateSignupKey.trim() || null,
       federalSignupKey: form.federalSignupKey.trim() || null,
+      childEmail: form.childEmail.trim().toLowerCase() || null,
+      childLinkCode: form.childLinkCode.trim() || null,
+      relationshipLabel: form.relationshipLabel.trim() || null,
       signupKey:
         role === "school"
           ? form.schoolSignupKey.trim()
@@ -163,6 +176,7 @@ export default function AuthPage({ onLogin }) {
   }
 
   async function requestPasswordReset() {
+    // Ask backend for a reset token workflow.
     if (busy) return;
     setError("");
     setInfo("");
@@ -268,7 +282,7 @@ export default function AuthPage({ onLogin }) {
           <>
             <div className="field">
               <label>Account Type</label>
-              <div className="role-selector role-selector-4">
+              <div className="role-selector role-selector-5">
                 {roleOptions.map((opt) => (
                   <button
                     key={opt.id}
@@ -405,6 +419,41 @@ export default function AuthPage({ onLogin }) {
                       ))}
                     </select>
                   </div>
+                </div>
+              </>
+            )}
+
+            {role === "parent" && (
+              <>
+                <div className="field">
+                  <label>Child Student Email (optional)</label>
+                  <input
+                    placeholder="e.g. student@email.com"
+                    value={form.childEmail}
+                    onChange={(event) => setField("childEmail", event.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <div className="field">
+                    <label>Student Link Code (optional)</label>
+                    <input
+                      placeholder="e.g. 8J4K2M7Q"
+                      value={form.childLinkCode}
+                      onChange={(event) => setField("childLinkCode", event.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Relationship (optional)</label>
+                    <input
+                      placeholder="Mother, Father, Guardian"
+                      value={form.relationshipLabel}
+                      onChange={(event) => setField("relationshipLabel", event.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="panel-hint">
+                  You can still link your child later from the parent dashboard if you skip this now.
                 </div>
               </>
             )}

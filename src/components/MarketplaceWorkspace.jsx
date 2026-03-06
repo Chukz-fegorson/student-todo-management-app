@@ -7,12 +7,14 @@ import {
   getLgaOptionsForState,
 } from "../lib/locationData";
 
+// Convert backend kobo values into naira display safely.
 function asNaira(valueKobo, valueNaira) {
   if (Number.isFinite(Number(valueNaira))) return Number(valueNaira);
   return Number(valueKobo || 0) / 100;
 }
 
 function toQueryString(params) {
+  // Build API query params and skip empty filters.
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
@@ -28,6 +30,7 @@ function mediaKindFromFile(file) {
 }
 
 function fileToDataUrl(file) {
+  // Read local image/video file so we can preview and upload it.
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
@@ -48,6 +51,7 @@ const EMPTY_FILTERS = Object.freeze({
 const OTHER_CATEGORY_VALUE = "__other__";
 
 function marketChipMeta(product) {
+  // Badge color/label mapping based on seller governance level.
   const role = String(product?.sellerRole || "").toLowerCase();
   if (role === "federal") {
     return { label: "Federal Market", className: "market-card-chip-federal" };
@@ -62,10 +66,12 @@ function marketChipMeta(product) {
 }
 
 export default function MarketplaceWorkspace({ user }) {
+  // Marketplace state buckets: catalog data, ui states, and form drafts.
   const [categories, setCategories] = useState([]);
   const [categoryRequests, setCategoryRequests] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -93,11 +99,16 @@ export default function MarketplaceWorkspace({ user }) {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [detailMediaIndex, setDetailMediaIndex] = useState(0);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
+  const [purchasePaymentMode, setPurchasePaymentMode] = useState("cash");
+  const [purchasePaymentReference, setPurchasePaymentReference] = useState("");
   const [offerDraft, setOfferDraft] = useState({ amountNaira: "", note: "" });
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, reviewText: "" });
 
   const canModerate =
     user.role === "school" || user.role === "state" || user.role === "federal";
+  const canResolveDisputes =
+    user.role === "school" || user.role === "state" || user.role === "federal";
+  // Only student/school can publish listings.
   const canSell = user.role === "student" || user.role === "school";
   const listingType = user.role === "school" ? "school" : "student";
 
@@ -144,6 +155,7 @@ export default function MarketplaceWorkspace({ user }) {
   }, [products, filtersDraft.state]);
 
   const loadMarketplace = useCallback(async () => {
+    // Load categories/products/orders (and moderation queue when allowed).
     try {
       setError("");
       setLoading(true);
@@ -159,13 +171,15 @@ export default function MarketplaceWorkspace({ user }) {
         apiGet("/market/categories"),
         apiGet(`/market/products${query}`),
         apiGet("/market/orders"),
+        apiGet("/market/disputes"),
       ];
       if (canModerate) requests.push(apiGet("/market/category-requests"));
-      const [categoriesData, productsData, ordersData, requestData] =
+      const [categoriesData, productsData, ordersData, disputesData, requestData] =
         await Promise.all(requests);
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       setProducts(Array.isArray(productsData) ? productsData : []);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
+      setDisputes(Array.isArray(disputesData) ? disputesData : []);
       setCategoryRequests(Array.isArray(requestData) ? requestData : []);
     } catch (err) {
       setError(err.message || "Failed to load marketplace workspace.");
@@ -199,6 +213,7 @@ export default function MarketplaceWorkspace({ user }) {
   }, [selectedProductId]);
 
   function applyFilters() {
+    // Apply current filter draft to trigger fresh product query.
     setFiltersApplied({ ...filtersDraft });
   }
 
@@ -211,6 +226,8 @@ export default function MarketplaceWorkspace({ user }) {
     setSelectedProductId(product.id);
     setDetailMediaIndex(0);
     setPurchaseQuantity(1);
+    setPurchasePaymentMode("cash");
+    setPurchasePaymentReference("");
     setOfferDraft({ amountNaira: "", note: "" });
   }
 
@@ -235,6 +252,7 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function handleMediaFiles(event) {
+    // Accept multiple images/videos, size-check, then convert to data URLs.
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     try {
@@ -273,6 +291,7 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function createListing() {
+    // Validate listing form, then publish listing to backend.
     if (!listingForm.title.trim()) return setError("Product title is required.");
     if (!Number(listingForm.priceNaira)) return setError("Valid price is required.");
     const isCustomCategory = listingForm.categoryId === OTHER_CATEGORY_VALUE;
@@ -315,6 +334,7 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function requestCategory(options = {}) {
+    // Create category request; school flow can auto-approve immediately.
     const name = String(options.name ?? categoryRequestName).trim();
     if (!name) return setError("Enter category name.");
     const listingTypeForRequest = options.listingType || "student";
@@ -364,15 +384,27 @@ export default function MarketplaceWorkspace({ user }) {
     }
   }
 
-  async function placeOrder(productId, quantity = 1) {
+  async function placeOrder(productId, quantity = 1, paymentMode = "cash") {
+    // Create purchase order (payment confirmation happens later in order flow).
     try {
       setBusy(true);
       setError("");
       await apiPost("/market/orders", {
         productId,
         quantity: Math.max(1, Number(quantity) || 1),
+        paymentMode,
+        buyerPaymentReference:
+          paymentMode === "transfer" || paymentMode === "p2p"
+            ? String(purchasePaymentReference || "").trim() || null
+            : null,
       });
-      setNotice("Order created. Pay cash and ask seller to confirm.");
+      setNotice(
+        paymentMode === "transfer"
+          ? "Order created. Complete transfer to seller account and wait for seller confirmation."
+          : paymentMode === "p2p"
+          ? "Order created. Complete P2P payment and wait for seller confirmation."
+          : "Order created. Pay cash and ask seller to confirm."
+      );
       await loadMarketplace();
     } catch (err) {
       setError(err.message || "Failed to place order.");
@@ -412,24 +444,26 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function sellerConfirmCash(orderId) {
+    // Seller confirms payment received and system generates buyer claim code.
     try {
       setBusy(true);
       setError("");
       const data = await apiPost(`/market/orders/${orderId}/seller-confirm-cash`, {});
       setNotice(
         data?.claimCode
-          ? `Cash confirmed. Claim code ${data.claimCode} was sent to buyer inbox and stays visible on this order until buyer claims.`
-          : "Cash confirmed."
+          ? `Payment confirmed. Claim code ${data.claimCode} was sent to buyer inbox and stays visible on this order until buyer claims.`
+          : "Payment confirmed."
       );
       await loadMarketplace();
     } catch (err) {
-      setError(err.message || "Failed to confirm cash.");
+      setError(err.message || "Failed to confirm payment.");
     } finally {
       setBusy(false);
     }
   }
 
   async function buyerClaim(orderId) {
+    // Buyer enters claim code to finalize the order as completed.
     const claimCode = String(claimCodes[orderId] || "").trim();
     if (!claimCode) return setError("Enter claim code first.");
     try {
@@ -441,6 +475,58 @@ export default function MarketplaceWorkspace({ user }) {
       await loadMarketplace();
     } catch (err) {
       setError(err.message || "Failed to claim order.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function raiseDispute(orderId) {
+    const reason = window.prompt("Dispute reason (required):", "Item not delivered as agreed");
+    if (!reason || !String(reason).trim()) return;
+    const details = window.prompt("Additional details (optional):", "");
+    try {
+      setBusy(true);
+      setError("");
+      await apiPost(`/market/orders/${orderId}/disputes`, {
+        reason: String(reason).trim(),
+        details: details ? String(details).trim() : null,
+      });
+      setNotice("Dispute opened.");
+      await loadMarketplace();
+    } catch (err) {
+      setError(err.message || "Failed to open dispute.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resolveDispute(disputeId, status = "Resolved") {
+    const resolutionNote = window.prompt("Resolution note (optional):", "");
+    try {
+      setBusy(true);
+      setError("");
+      await apiPost(`/market/disputes/${disputeId}/resolve`, {
+        status,
+        resolutionNote: resolutionNote ? String(resolutionNote).trim() : null,
+      });
+      setNotice(`Dispute ${status.toLowerCase()}.`);
+      await loadMarketplace();
+    } catch (err) {
+      setError(err.message || "Failed to resolve dispute.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setSellerVerification(userId, verify) {
+    try {
+      setBusy(true);
+      setError("");
+      await apiPost(`/market/users/${userId}/verify`, { verify });
+      setNotice(verify ? "Seller verified." : "Seller verification removed.");
+      await loadMarketplace();
+    } catch (err) {
+      setError(err.message || "Failed to update seller verification.");
     } finally {
       setBusy(false);
     }
@@ -467,6 +553,7 @@ export default function MarketplaceWorkspace({ user }) {
   }
 
   async function reviewProduct(productId) {
+    // Save star rating + optional review text.
     const rating = Math.max(1, Math.min(5, Number(reviewDraft.rating) || 0));
     if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
       return setError("Choose a star rating between 1 and 5.");
@@ -916,6 +1003,8 @@ export default function MarketplaceWorkspace({ user }) {
                     <span>{product.sellerName || "Seller"}</span>
                     <span>|</span>
                     <span>{product.schoolName || product.stateName || "Nigeria"}</span>
+                    <span>|</span>
+                    <span>{product.sellerVerified ? "Verified seller" : "Unverified seller"}</span>
                   </div>
                   <div className="market-card-meta">
                     <span>Qty: {product.quantityAvailable}</span>
@@ -935,7 +1024,7 @@ export default function MarketplaceWorkspace({ user }) {
                   <button
                     className="btn btn-primary btn-sm"
                     disabled={busy}
-                    onClick={() => placeOrder(product.id, 1)}
+                    onClick={() => placeOrder(product.id, 1, "cash")}
                   >
                     Buy
                   </button>
@@ -971,11 +1060,33 @@ export default function MarketplaceWorkspace({ user }) {
                     {Number(order.totalAmountNaira || 0).toLocaleString()} | Created:{" "}
                     {formatDateTime(order.createdAt)}
                   </div>
+                  <div className="calendar-meta">
+                    Mode: {order.paymentMode || "cash"} | Platform Fee: N
+                    {Number(order.platformFeeNaira || 0).toLocaleString()} | Seller Net: N
+                    {Number(order.sellerNetNaira || 0).toLocaleString()}
+                    {order.buyerPaymentReference
+                      ? ` | Buyer Ref: ${order.buyerPaymentReference}`
+                      : ""}
+                  </div>
                   {order.cashConfirmedAt && (
                     <div className="calendar-meta">
-                      Cash confirmed: {formatDateTime(order.cashConfirmedAt)}
+                      Seller confirmed payment: {formatDateTime(order.cashConfirmedAt)}
                     </div>
                   )}
+                  {isBuyer &&
+                    order.status === "PendingCash" &&
+                    (order.paymentMode === "transfer" || order.paymentMode === "p2p") && (
+                      <div className="review-summary-box" style={{ marginTop: "0.4rem" }}>
+                        Seller Account:{" "}
+                        {order.sellerPaymentDetails?.bankName
+                          ? `${order.sellerPaymentDetails.bankName} | `
+                          : ""}
+                        {order.sellerPaymentDetails?.accountName || "N/A"}{" "}
+                        {order.sellerPaymentDetails?.accountNumber
+                          ? `(${order.sellerPaymentDetails.accountNumber})`
+                          : ""}
+                      </div>
+                    )}
                   {isSeller && order.status === "CashConfirmed" && order.claimCode && (
                     <div className="review-summary-box" style={{ marginTop: "0.4rem" }}>
                       Claim Code: <strong>{order.claimCode}</strong>
@@ -994,7 +1105,7 @@ export default function MarketplaceWorkspace({ user }) {
                       disabled={busy}
                       onClick={() => sellerConfirmCash(order.id)}
                     >
-                      Confirm Cash
+                      Confirm Payment
                     </button>
                   )}
                   {isBuyer && order.status === "CashConfirmed" && (
@@ -1015,6 +1126,15 @@ export default function MarketplaceWorkspace({ user }) {
                         Claim
                       </button>
                     </>
+                  )}
+                  {(isBuyer || isSeller) && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy}
+                      onClick={() => raiseDispute(order.id)}
+                    >
+                      Raise Dispute
+                    </button>
                   )}
                 </div>
               </div>
@@ -1043,8 +1163,9 @@ export default function MarketplaceWorkspace({ user }) {
                   </div>
                   <div className="calendar-meta">
                     Created: {formatDateTime(order.createdAt)}
+                    {order.paymentMode ? ` | Mode: ${order.paymentMode}` : ""}
                     {order.cashConfirmedAt
-                      ? ` | Cash Confirmed: ${formatDateTime(order.cashConfirmedAt)}`
+                      ? ` | Payment Confirmed: ${formatDateTime(order.cashConfirmedAt)}`
                       : ""}
                     {order.claimedAt ? ` | Completed: ${formatDateTime(order.claimedAt)}` : ""}
                   </div>
@@ -1053,6 +1174,57 @@ export default function MarketplaceWorkspace({ user }) {
               {!completedOrders.length && (
                 <div className="empty-col">No completed transactions yet.</div>
               )}
+            </div>
+          </div>
+
+          <div style={{ marginTop: "1rem" }}>
+            <div className="panel-subtitle">Disputes ({disputes.length})</div>
+            <div className="calendar-list">
+              {disputes.map((dispute) => (
+                <div key={dispute.id} className="review-card">
+                  <div className="review-card-header">
+                    <div>
+                      <div className="review-card-title">
+                        {dispute.productTitle || "Marketplace dispute"}
+                      </div>
+                      <div className="review-card-meta">
+                        Status: {dispute.status} | Raised by:{" "}
+                        {dispute.raisedByName || "User"} | Against:{" "}
+                        {dispute.againstName || "User"}
+                      </div>
+                    </div>
+                    <div className="calendar-meta">{formatDateTime(dispute.createdAt)}</div>
+                  </div>
+                  <div className="review-summary-box">
+                    <strong>{dispute.reason}</strong>
+                    {dispute.details ? ` | ${dispute.details}` : ""}
+                  </div>
+                  {!!dispute.resolutionNote && (
+                    <div className="calendar-meta">
+                      Resolution: {dispute.resolutionNote}
+                    </div>
+                  )}
+                  {canResolveDisputes && dispute.status === "Open" && (
+                    <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.45rem" }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={busy}
+                        onClick={() => resolveDispute(dispute.id, "Resolved")}
+                      >
+                        Resolve
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        disabled={busy}
+                        onClick={() => resolveDispute(dispute.id, "Rejected")}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {!disputes.length && <div className="empty-col">No disputes found.</div>}
             </div>
           </div>
         </>
@@ -1132,6 +1304,8 @@ export default function MarketplaceWorkspace({ user }) {
                   <span>|</span>
                   <span>Qty: {selectedProduct.quantityAvailable}</span>
                   <span>|</span>
+                  <span>{selectedProduct.sellerVerified ? "Verified seller" : "Unverified seller"}</span>
+                  <span>|</span>
                   <span>
                     Rating: {Number(selectedProduct.averageRating || 0).toFixed(2)} (
                     {selectedProduct.ratingCount || 0})
@@ -1167,14 +1341,41 @@ export default function MarketplaceWorkspace({ user }) {
                           )
                         }
                       />
+                      <select
+                        value={purchasePaymentMode}
+                        onChange={(event) => setPurchasePaymentMode(event.target.value)}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="p2p">P2P Transfer</option>
+                        <option value="transfer">Bank Transfer</option>
+                      </select>
                       <button
                         className="btn btn-primary btn-sm"
                         disabled={busy}
-                        onClick={() => placeOrder(selectedProduct.id, purchaseQuantity)}
+                        onClick={() =>
+                          placeOrder(
+                            selectedProduct.id,
+                            purchaseQuantity,
+                            purchasePaymentMode
+                          )
+                        }
                       >
                         Purchase
                       </button>
                     </div>
+                    {(purchasePaymentMode === "transfer" ||
+                      purchasePaymentMode === "p2p") && (
+                      <div className="field" style={{ marginTop: "0.5rem" }}>
+                        <label>Your Payment Reference (optional)</label>
+                        <input
+                          placeholder="Bank transfer/P2P reference"
+                          value={purchasePaymentReference}
+                          onChange={(event) =>
+                            setPurchasePaymentReference(event.target.value)
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1263,6 +1464,18 @@ export default function MarketplaceWorkspace({ user }) {
                   </button>
                   {canModerate && (
                     <>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={busy}
+                        onClick={() =>
+                          setSellerVerification(
+                            selectedProduct.sellerUserId,
+                            !selectedProduct.sellerVerified
+                          )
+                        }
+                      >
+                        {selectedProduct.sellerVerified ? "Unverify Seller" : "Verify Seller"}
+                      </button>
                       <button
                         className="btn btn-ghost btn-sm"
                         disabled={busy}

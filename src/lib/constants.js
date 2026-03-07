@@ -23,4 +23,18 @@ export const ROLE_LABELS = {
   federal: "Federal Ministry",
 };
 
+export const PARENT_RELATIONSHIP_OPTIONS = [
+  "Mother",
+  "Father",
+  "Guardian",
+  "Grandmother",
+  "Grandfather",
+  "Aunt",
+  "Uncle",
+  "Older Sibling",
+  "Foster Parent",
+  "Caregiver",
+  "Other",
+];
+
 export const DEFAULT_REMINDER_OFFSETS = [30, 10, 5];

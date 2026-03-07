@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { effectiveProgress, formatDateTime } from "../lib/helpers";
+import { PARENT_RELATIONSHIP_OPTIONS } from "../lib/constants";
 
 export default function ParentDashboard({ user }) {
   const [children, setChildren] = useState([]);
@@ -177,8 +178,8 @@ export default function ParentDashboard({ user }) {
               />
             </div>
             <div className="field">
-              <label>Relationship (optional)</label>
-              <input
+              <label>Relationship</label>
+              <select
                 value={linkForm.relationshipLabel}
                 onChange={(event) =>
                   setLinkForm((prev) => ({
@@ -186,8 +187,14 @@ export default function ParentDashboard({ user }) {
                     relationshipLabel: event.target.value,
                   }))
                 }
-                placeholder="Mother/Father/Guardian"
-              />
+              >
+                <option value="">Select relationship</option>
+                {PARENT_RELATIONSHIP_OPTIONS.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <button className="btn btn-primary btn-sm" disabled={busy} onClick={linkChild}>

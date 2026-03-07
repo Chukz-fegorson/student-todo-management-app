@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, setToken } from "../lib/api";
-import { ROLE_LABELS } from "../lib/constants";
+import { PARENT_RELATIONSHIP_OPTIONS, ROLE_LABELS } from "../lib/constants";
 import {
   NIGERIA_STATES,
   buildStateLgaIndex,
@@ -43,6 +43,7 @@ export default function AuthPage({ onLogin }) {
     childEmail: "",
     childLinkCode: "",
     relationshipLabel: "",
+    addressLine: "",
     resetToken: "",
     newPassword: "",
   });
@@ -132,6 +133,7 @@ export default function AuthPage({ onLogin }) {
       childEmail: form.childEmail.trim().toLowerCase() || null,
       childLinkCode: form.childLinkCode.trim() || null,
       relationshipLabel: form.relationshipLabel.trim() || null,
+      addressLine: form.addressLine.trim() || null,
       signupKey:
         role === "school"
           ? form.schoolSignupKey.trim()
@@ -147,9 +149,34 @@ export default function AuthPage({ onLogin }) {
       return;
     }
 
+    if (role === "student" && !payload.schoolId) {
+      setError("School is required for student registration.");
+      return;
+    }
+
+    if (role === "student" && (!payload.stateName || !payload.lgaName)) {
+      setError("State and LGA are required for student registration.");
+      return;
+    }
+
     if (role === "school" && (!payload.schoolName || !payload.stateName || !payload.lgaName)) {
       setError("School, state, and LGA are required for school registration.");
       return;
+    }
+
+    if (role === "parent") {
+      if (!payload.relationshipLabel) {
+        setError("Relationship is required for parent/guardian registration.");
+        return;
+      }
+      if (!payload.stateName || !payload.lgaName) {
+        setError("State and LGA are required for parent/guardian registration.");
+        return;
+      }
+      if (!payload.addressLine) {
+        setError("Location / address is required for parent/guardian registration.");
+        return;
+      }
     }
 
     if (role === "state" && !payload.stateName) {
@@ -157,7 +184,7 @@ export default function AuthPage({ onLogin }) {
       return;
     }
 
-    if (role !== "student" && !payload.signupKey) {
+    if (["school", "state", "federal"].includes(role) && !payload.signupKey) {
       setError("Signup key is required for this account type.");
       return;
     }
@@ -308,7 +335,7 @@ export default function AuthPage({ onLogin }) {
             {role === "student" && (
               <>
                 <div className="field">
-                  <label>School (optional)</label>
+                  <label>School *</label>
                   <select
                     value={form.schoolId}
                     onChange={(event) => {
@@ -320,13 +347,20 @@ export default function AuthPage({ onLogin }) {
                     }}
                     disabled={loadingSchools}
                   >
-                    <option value="">No linked school</option>
+                    <option value="">
+                      {loadingSchools ? "Loading schools..." : "Select school"}
+                    </option>
                     {schools.map((school) => (
                       <option key={school.id} value={school.id}>
                         {school.name} - {school.lgaName}, {school.stateName}
                       </option>
                     ))}
                   </select>
+                  {!loadingSchools && !schools.length && (
+                    <div className="panel-hint">
+                      No schools available yet. Register a school/teacher account first.
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
@@ -339,15 +373,14 @@ export default function AuthPage({ onLogin }) {
                     />
                   </div>
                   <div className="field">
-                    <label>State (optional)</label>
+                    <label>State *</label>
                     <select
                       value={form.stateName}
-                      onChange={(event) => {
-                        setField("stateName", event.target.value);
-                        setField("lgaName", "");
-                      }}
+                      disabled
                     >
-                      <option value="">Select state</option>
+                      <option value="">
+                        {form.schoolId ? "Auto from selected school" : "Select school first"}
+                      </option>
                       {NIGERIA_STATES.map((stateName) => (
                         <option key={stateName} value={stateName}>
                           {stateName}
@@ -358,13 +391,11 @@ export default function AuthPage({ onLogin }) {
                 </div>
 
                 <div className="field">
-                  <label>LGA (optional)</label>
-                  <select
-                    value={form.lgaName}
-                    onChange={(event) => setField("lgaName", event.target.value)}
-                    disabled={!form.stateName}
-                  >
-                    <option value="">{form.stateName ? "Select LGA" : "Select state first"}</option>
+                  <label>LGA *</label>
+                  <select value={form.lgaName} disabled>
+                    <option value="">
+                      {form.schoolId ? "Auto from selected school" : "Select school first"}
+                    </option>
                     {lgaOptions.map((lgaName) => (
                       <option key={lgaName} value={lgaName}>
                         {lgaName}
@@ -378,7 +409,7 @@ export default function AuthPage({ onLogin }) {
             {role === "school" && (
               <>
                 <div className="field">
-                  <label>School / Institution Name *</label>
+                  <label>School / Teacher Name *</label>
                   <input
                     placeholder="e.g. Lagos Model College"
                     value={form.schoolName}
@@ -444,14 +475,64 @@ export default function AuthPage({ onLogin }) {
                     />
                   </div>
                   <div className="field">
-                    <label>Relationship (optional)</label>
-                    <input
-                      placeholder="Mother, Father, Guardian"
+                    <label>Relationship *</label>
+                    <select
                       value={form.relationshipLabel}
                       onChange={(event) => setField("relationshipLabel", event.target.value)}
-                    />
+                    >
+                      <option value="">Select relationship</option>
+                      {PARENT_RELATIONSHIP_OPTIONS.map((entry) => (
+                        <option key={entry} value={entry}>
+                          {entry}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <div className="field">
+                    <label>State *</label>
+                    <select
+                      value={form.stateName}
+                      onChange={(event) => {
+                        setField("stateName", event.target.value);
+                        setField("lgaName", "");
+                      }}
+                    >
+                      <option value="">Select state</option>
+                      {NIGERIA_STATES.map((stateName) => (
+                        <option key={stateName} value={stateName}>
+                          {stateName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>LGA *</label>
+                    <select
+                      value={form.lgaName}
+                      onChange={(event) => setField("lgaName", event.target.value)}
+                      disabled={!form.stateName}
+                    >
+                      <option value="">{form.stateName ? "Select LGA" : "Select state first"}</option>
+                      {lgaOptions.map((lgaName) => (
+                        <option key={lgaName} value={lgaName}>
+                          {lgaName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>Location / Address *</label>
+                  <input
+                    placeholder="House address or nearest landmark"
+                    value={form.addressLine}
+                    onChange={(event) => setField("addressLine", event.target.value)}
+                  />
+                  </div>
                 <div className="panel-hint">
                   You can still link your child later from the parent dashboard if you skip this now.
                 </div>

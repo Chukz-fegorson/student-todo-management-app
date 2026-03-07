@@ -220,6 +220,11 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     [directory, broadcastSearch]
   );
 
+  const selectedBroadcastUsers = useMemo(
+    () => directory.filter((entry) => broadcastRecipients.includes(entry.id)),
+    [directory, broadcastRecipients]
+  );
+
   const meetingParticipantDirectory = useMemo(
     () =>
       directory.filter((entry) =>
@@ -1143,34 +1148,51 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
               </div>
 
               <div className="panel-subtitle">Broadcast Message</div>
-              <div className="field">
-                <label>Search Broadcast Recipients</label>
-                <input
-                  value={broadcastSearch}
-                  onChange={(event) => setBroadcastSearch(event.target.value)}
-                  placeholder="Filter recipients..."
+              <div className="collab-broadcast-card">
+                <div className="field">
+                  <label>Search Broadcast Recipients</label>
+                  <input
+                    value={broadcastSearch}
+                    onChange={(event) => setBroadcastSearch(event.target.value)}
+                    placeholder="Filter recipients..."
+                  />
+                </div>
+                <div className="collab-checklist">
+                  {!broadcastDirectory.length && (
+                    <div className="empty-col">No recipients match your search.</div>
+                  )}
+                  {broadcastDirectory.map((entry) => (
+                    <label key={entry.id} className="check-item">
+                      <input
+                        type="checkbox"
+                        checked={broadcastRecipients.includes(entry.id)}
+                        onChange={() => toggleBroadcastRecipient(entry.id)}
+                      />
+                      {entry.name}
+                    </label>
+                  ))}
+                </div>
+                {!!selectedBroadcastUsers.length && (
+                  <div className="collab-chip-row">
+                    {selectedBroadcastUsers.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="collab-chip"
+                        onClick={() => toggleBroadcastRecipient(entry.id)}
+                        title="Remove recipient"
+                      >
+                        {entry.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  value={broadcastText}
+                  onChange={(event) => setBroadcastText(event.target.value)}
+                  placeholder="Type broadcast update..."
                 />
               </div>
-              <div className="collab-checklist">
-                {!broadcastDirectory.length && (
-                  <div className="empty-col">No recipients match your search.</div>
-                )}
-                {broadcastDirectory.map((entry) => (
-                  <label key={entry.id} className="check-item">
-                    <input
-                      type="checkbox"
-                      checked={broadcastRecipients.includes(entry.id)}
-                      onChange={() => toggleBroadcastRecipient(entry.id)}
-                    />
-                    {entry.name}
-                  </label>
-                ))}
-              </div>
-              <textarea
-                value={broadcastText}
-                onChange={(event) => setBroadcastText(event.target.value)}
-                placeholder="Type broadcast update..."
-              />
               <button
                 type="button"
                 className="btn btn-purple btn-full"
@@ -1185,10 +1207,15 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
 
             <section className="collab-main">
               <div className="collab-main-head">
-                <div className="panel-subtitle">
-                  {selectedChatUser
-                    ? `Direct chat with ${selectedChatUser.name}`
-                    : "Select a user to start chatting"}
+                <div>
+                  <div className="panel-subtitle">
+                    {selectedChatUser
+                      ? `Direct chat with ${selectedChatUser.name}`
+                      : "Select a user to start chatting"}
+                  </div>
+                  <div className="collab-chat-hint">
+                    Sender, date, and time are shown above each message.
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1208,6 +1235,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
                   chatMessages.map((message) => {
                     const mine = message.senderId === user.id;
                     const senderLabel = mine ? "You" : message.senderName || "User";
+                    const recipientLabel = message.recipientName || "User";
                     return (
                       <div
                         key={message.id}
@@ -1215,9 +1243,16 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
                       >
                         <div className="chat-bubble-head">
                           <strong>{senderLabel}</strong>
-                          <small>{formatDateTime(message.createdAt)}</small>
                           {message.isBroadcast && (
                             <span className="chat-bubble-tag">Broadcast</span>
+                          )}
+                        </div>
+                        <div className="chat-bubble-meta">
+                          <small>{formatDateTime(message.createdAt)}</small>
+                          {message.isBroadcast && (
+                            <small>
+                              {mine ? `To: ${recipientLabel}` : `Sent by: ${senderLabel}`}
+                            </small>
                           )}
                         </div>
                         <div className="chat-bubble-body">{message.body}</div>

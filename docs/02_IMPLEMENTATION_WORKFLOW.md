@@ -1,6 +1,6 @@
 # StudyFlow Implementation Workflow
 
-Last updated: March 6, 2026
+Last updated: March 7, 2026
 
 ## 1. Delivery Method Used
 
@@ -152,3 +152,24 @@ The current implementation cycle follows this strict order:
   add dispute records and verification signals to moderation/trust workflows (implemented)
 - phase 6 target:
   expose KPI endpoints/cards for operational and governance reporting (implemented)
+
+### 8.3 March 7, 2026 Scope-Hardening Patch (Implemented)
+
+- registration data integrity hardening:
+  student signup now requires linked school and enforces school-derived state/LGA
+- location quality hardening:
+  state -> LGA dropdown now uses full Nigeria state/LGA reference data, not only current school rows
+- guardian onboarding hardening:
+  parent/guardian registration now requires relationship + state + LGA + location/address
+- backend policy parity:
+  server-side registration validation now mirrors frontend required-field rules
+- collaboration UX pass:
+  chat/broadcast message layout improved with clearer sender/date/time metadata and recipient context
+
+## 9. Next Approved Plan (Execution Queue)
+
+1. external AI provider integration for higher-quality transcript + summary outputs
+2. production-grade real-time call hardening and reliability controls
+3. real payment rail integration for fees and transaction reconciliation
+4. wallet/escrow foundation for marketplace negotiation and auction flows
+5. governance intelligence expansion (alerts, trend analytics, intervention signals)

@@ -480,6 +480,37 @@
   padding: 0.55rem;
 }
 
+.collab-broadcast-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.collab-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.collab-chip {
+  border: 1px solid rgba(79, 142, 247, 0.42);
+  background: rgba(79, 142, 247, 0.14);
+  color: #b8d4ff;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.collab-chat-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .collab-thread {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -517,11 +548,6 @@
   color: var(--text);
 }
 
-.chat-bubble-head small {
-  color: var(--muted);
-  font-size: 0.68rem;
-}
-
 .chat-bubble-tag {
   border: 1px solid rgba(167, 139, 250, 0.35);
   border-radius: 999px;
@@ -529,6 +555,18 @@
   font-size: 0.62rem;
   color: var(--purple);
   background: rgba(167, 139, 250, 0.13);
+}
+
+.chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.chat-bubble-meta small {
+  color: var(--muted);
+  font-size: 0.68rem;
 }
 
 .chat-bubble-body {

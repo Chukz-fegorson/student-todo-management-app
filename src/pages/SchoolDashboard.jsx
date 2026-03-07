@@ -22,6 +22,7 @@ import GradeModal from "../components/GradeModal";
 import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import CollaborationHubModal from "../components/CollaborationHubModal";
+import CoursesWorkspace from "../components/CoursesWorkspace";
 
 // Default shape for "assign task" form.
 const assignmentDefaults = {
@@ -224,6 +225,12 @@ function SchoolDashboard({ user }) {
           Tasks
         </button>
         <button
+          className={`view-tab module-tab ${view === "courses" ? "active" : ""}`}
+          onClick={() => setView("courses")}
+        >
+          Courses
+        </button>
+        <button
           className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
           onClick={() => setView("collab")}
         >
@@ -386,7 +393,9 @@ function SchoolDashboard({ user }) {
         </>
       )}
 
-      {view === "fees" ? (
+      {view === "courses" ? (
+        <CoursesWorkspace user={user} />
+      ) : view === "fees" ? (
         <FeesWorkspace user={user} />
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />

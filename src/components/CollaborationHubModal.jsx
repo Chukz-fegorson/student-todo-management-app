@@ -115,6 +115,46 @@ function isTranscriptLikeFile(file) {
   );
 }
 
+function normalizeTodoSignature(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hashText(value) {
+  // Small deterministic hash used for client-side idempotency keys.
+  let hash = 5381;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) + hash + text.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function buildActionClientKey({ meetingId, todoTitle, dueAt }) {
+  const base = `${meetingId || "no-meeting"}|${normalizeTodoSignature(
+    todoTitle
+  )}|${dueAt || "no-due"}`;
+  return `ai-${hashText(base)}`;
+}
+
+function uniqueAcceptedTodos(todoItems) {
+  const source = Array.isArray(todoItems) ? todoItems : [];
+  const seen = new Set();
+  const deduped = [];
+  for (const entry of source) {
+    const text = String(entry || "").trim();
+    if (text.length < 8) continue;
+    const signature = normalizeTodoSignature(text);
+    if (!signature || seen.has(signature)) continue;
+    seen.add(signature);
+    deduped.push(text);
+  }
+  return deduped;
+}
+
 export default function CollaborationHubModal({ user, onClose, embedded = false }) {
   // Three collab mini-modules in one place: chat, meetings, and community feed.
   const [tab, setTab] = useState("chat");
@@ -741,22 +781,44 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     // Turn accepted suggestions into personal action items + optional tasks.
     if (!activeMeetingId) return;
 
-    const todos = acceptedSummaryTodos.filter(Boolean);
+    const todos = uniqueAcceptedTodos(acceptedSummaryTodos);
     if (!todos.length) {
       setError("Accept one or more AI todo suggestions before syncing.");
       return;
     }
 
     const base = parseDate(defaultFollowUpDueFromMeeting(activeMeeting)) || new Date();
-    const items = todos.map((todo, index) => ({
-      title: todo,
-      details: activeMeeting?.title
-        ? `Captured from meeting: ${activeMeeting.title}`
-        : "Captured from meeting summary",
-      meetingId: activeMeetingId,
-      dueAt: new Date(base.getTime() + index * 30 * 60 * 1000).toISOString(),
-      status: "Todo",
-    }));
+    const existingSignatures = new Set(
+      actionItems
+        .filter((item) => item.meetingId === activeMeetingId)
+        .map((item) => normalizeTodoSignature(item.title))
+        .filter(Boolean)
+    );
+
+    const items = todos
+      .map((todo, index) => {
+        const dueAt = new Date(base.getTime() + index * 30 * 60 * 1000).toISOString();
+        return {
+          title: todo,
+          details: activeMeeting?.title
+            ? `Captured from meeting: ${activeMeeting.title}`
+            : "Captured from meeting summary",
+          meetingId: activeMeetingId,
+          dueAt,
+          status: "Todo",
+          clientKey: buildActionClientKey({
+            meetingId: activeMeetingId,
+            todoTitle: todo,
+            dueAt,
+          }),
+        };
+      })
+      .filter((item) => !existingSignatures.has(normalizeTodoSignature(item.title)));
+
+    if (!items.length) {
+      setNotice("All accepted todos are already in your meeting action list.");
+      return;
+    }
 
     try {
       setSavingActionItems(true);
@@ -764,15 +826,15 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
       const created = await apiPost("/action-items/bulk", { items });
       let createdTasksCount = 0;
       if (user.role === "student") {
-        const taskPayloads = todos.map((todo, index) => ({
-          title: todo,
+        const taskPayloads = items.map((item) => ({
+          title: item.title,
           description: activeMeeting?.title
             ? `Captured from meeting: ${activeMeeting.title}`
             : "Captured from meeting summary",
           category: "Other",
           priority: "Medium",
           status: "Todo",
-          deadline: new Date(base.getTime() + index * 30 * 60 * 1000).toISOString(),
+          deadline: item.dueAt,
           progress: 0,
           learningSummary: "",
         }));
@@ -795,10 +857,11 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
       }
       await loadActionItems();
       const actionItemsCount = Array.isArray(created) ? created.length : items.length;
+      const skippedCount = Math.max(0, todos.length - items.length);
       setNotice(
         user.role === "student"
-          ? `${actionItemsCount} item(s) added to Collaboration todos and ${createdTasksCount} synced to your main task board.`
-          : `${actionItemsCount} summary todo(s) added to your personal list.`
+          ? `${actionItemsCount} item(s) synced, ${skippedCount} duplicate(s) skipped, and ${createdTasksCount} added to your main task board.`
+          : `${actionItemsCount} summary todo(s) synced and ${skippedCount} duplicate(s) skipped.`
       );
     } catch (err) {
       setError(err.message || "Failed to add summary todos to your list.");
@@ -808,7 +871,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   }
 
   function addSummaryTodosToCalendar() {
-    const todos = acceptedSummaryTodos.filter(Boolean);
+    const todos = uniqueAcceptedTodos(acceptedSummaryTodos);
     if (!todos.length) {
       setError("Accept one or more AI todo suggestions first.");
       return;
@@ -825,7 +888,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
   function planFollowUpMeetingFromSummary() {
     // Pre-fill create-meeting form using accepted summary action points.
     if (!activeMeeting) return;
-    const todos = acceptedSummaryTodos.filter(Boolean);
+    const todos = uniqueAcceptedTodos(acceptedSummaryTodos);
     if (!todos.length) {
       setError("Accept one or more AI todo suggestions before drafting follow-up.");
       return;

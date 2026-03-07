@@ -15,6 +15,7 @@ import DeleteModal from "../components/DeleteModal";
 import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import CollaborationHubModal from "../components/CollaborationHubModal";
+import CoursesWorkspace from "../components/CoursesWorkspace";
 
 // We store reminder history in browser storage so we do not repeat the same alert forever.
 const REMINDER_SEEN_KEY = "reminders_seen";
@@ -46,6 +47,7 @@ export default function StudentApp({ user }) {
   const [deleting, setDeleting] = useState(null);
   const [parentReviews, setParentReviews] = useState([]);
   const [parentLinkCode, setParentLinkCode] = useState("");
+  const [courseOverview, setCourseOverview] = useState(null);
   // Which module tab is currently open.
   const [view, setView] = useState("tasks");
 
@@ -77,11 +79,21 @@ export default function StudentApp({ user }) {
     }
   }, [user.id]);
 
+  const loadCourseOverview = useCallback(async () => {
+    try {
+      const data = await apiGet("/courses/cgpa/me");
+      setCourseOverview(data || null);
+    } catch {
+      setCourseOverview(null);
+    }
+  }, []);
+
   useEffect(() => {
     // Load tasks whenever user identity changes.
     loadTodos();
     loadParentData();
-  }, [user.id, loadParentData]);
+    loadCourseOverview();
+  }, [user.id, loadParentData, loadCourseOverview]);
 
   useEffect(() => {
     // Every 30s, check deadlines and fire reminders when needed.
@@ -91,7 +103,14 @@ export default function StudentApp({ user }) {
       let latestMessage = "";
       const nowMs = Date.now();
 
-      for (const todo of todos) {
+      const courseReminderItems = (courseOverview?.upcomingDeadlines || []).map((entry) => ({
+        id: `course-${entry.id}`,
+        title: `${entry.courseTitle}: ${entry.assessmentTitle}`,
+        deadline: entry.dueAt,
+        status: "Course",
+      }));
+
+      for (const todo of [...todos, ...courseReminderItems]) {
         if (!todo.deadline || todo.status === "Graded") continue;
         const due = parseDate(todo.deadline);
         if (!due) continue;
@@ -125,7 +144,7 @@ export default function StudentApp({ user }) {
     }, 30000);
 
     return () => window.clearInterval(timer);
-  }, [todos]);
+  }, [todos, courseOverview]);
 
   async function enableNotifications() {
     // Browser permission gate for local reminder popups.
@@ -194,6 +213,9 @@ export default function StudentApp({ user }) {
         todos.reduce((sum, todo) => sum + effectiveProgress(todo), 0) / total
       )
     : 0;
+  const courseProgress = Number(courseOverview?.overallCourseProgress || 0);
+  const cgpa = Number(courseOverview?.cgpa || 0);
+  const selectedCoursesCount = Number(courseOverview?.selectedCoursesCount || 0);
 
   // Build kanban columns from same task list.
   const columns = useMemo(
@@ -208,14 +230,23 @@ export default function StudentApp({ user }) {
 
   // Show nearest deadlines first.
   const upcomingDeadlines = useMemo(() => {
-    return todos
+    const taskItems = todos.filter((todo) => parseDate(todo.deadline));
+    const courseItems = (courseOverview?.upcomingDeadlines || []).map((entry) => ({
+      id: `course-${entry.id}`,
+      title: `${entry.courseTitle}: ${entry.assessmentTitle}`,
+      category: entry.assessmentType,
+      status: "Course",
+      deadline: entry.dueAt,
+      sourceType: "course",
+    }));
+    return [...taskItems, ...courseItems]
       .filter((todo) => parseDate(todo.deadline))
       .sort(
         (a, b) =>
           parseDate(a.deadline).getTime() - parseDate(b.deadline).getTime()
       )
       .slice(0, 8);
-  }, [todos]);
+  }, [todos, courseOverview]);
 
   return (
     <div className="main">
@@ -225,6 +256,12 @@ export default function StudentApp({ user }) {
           onClick={() => setView("tasks")}
         >
           My Tasks
+        </button>
+        <button
+          className={`view-tab module-tab ${view === "courses" ? "active" : ""}`}
+          onClick={() => setView("courses")}
+        >
+          Courses
         </button>
         <button
           className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
@@ -275,6 +312,18 @@ export default function StudentApp({ user }) {
               <div className="stat-label">Average Progress</div>
               <div className="stat-value stat-blue">{avgProgress}%</div>
             </div>
+            <div className="stat-card">
+              <div className="stat-label">Course Progress</div>
+              <div className="stat-value stat-amber">{courseProgress}%</div>
+              <div className="stat-sub">{selectedCoursesCount} selected</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Current CGPA</div>
+              <div className="stat-value stat-purple">{cgpa.toFixed(2)}</div>
+              <div className="stat-sub">
+                Scale: {(courseOverview?.gradingScale || "ng_5").toUpperCase()}
+              </div>
+            </div>
           </div>
 
           <div className="toolbar">
@@ -287,7 +336,13 @@ export default function StudentApp({ user }) {
             >
               New Task
             </button>
-            <button className="btn btn-ghost" onClick={loadTodos}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                loadTodos();
+                loadCourseOverview();
+              }}
+            >
               Refresh
             </button>
             <button className="btn btn-ghost" onClick={enableNotifications}>
@@ -297,7 +352,18 @@ export default function StudentApp({ user }) {
               className="btn btn-ghost"
               onClick={() =>
                 exportTasksToCalendar(
-                  todos.filter((todo) => todo.deadline),
+                  [
+                    ...todos.filter((todo) => todo.deadline),
+                    ...(courseOverview?.upcomingDeadlines || []).map((entry) => ({
+                      id: `course-${entry.id}`,
+                      title: `${entry.courseTitle}: ${entry.assessmentTitle}`,
+                      description: `Course ${entry.assessmentType}`,
+                      category: "Course",
+                      status: "Course",
+                      deadline: entry.dueAt,
+                      reminderOffsets: [30, 10, 5],
+                    })),
+                  ],
                   `${user.name || "student"}-tasks.ics`
                 )
               }
@@ -308,7 +374,9 @@ export default function StudentApp({ user }) {
         </>
       )}
 
-      {view === "fees" ? (
+      {view === "courses" ? (
+        <CoursesWorkspace user={user} />
+      ) : view === "fees" ? (
         <FeesWorkspace user={user} />
       ) : view === "market" ? (
         <MarketplaceWorkspace user={user} />
@@ -365,11 +433,11 @@ export default function StudentApp({ user }) {
                 {upcomingDeadlines.map((todo) => (
                   <div key={todo.id} className="calendar-item">
                     <div>
-                      <div className="calendar-title">{todo.title}</div>
-                      <div className="calendar-meta">
-                        {todo.category} | {todo.status}
+                        <div className="calendar-title">{todo.title}</div>
+                        <div className="calendar-meta">
+                          {todo.category} | {todo.status}
+                        </div>
                       </div>
-                    </div>
                     <div className="calendar-date">{formatDateTime(todo.deadline)}</div>
                   </div>
                 ))}

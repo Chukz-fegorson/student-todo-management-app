@@ -155,7 +155,12 @@ function uniqueAcceptedTodos(todoItems) {
   return deduped;
 }
 
-export default function CollaborationHubModal({ user, onClose, embedded = false }) {
+export default function CollaborationHubModal({
+  user,
+  onClose,
+  embedded = false,
+  navRoute,
+}) {
   // Three collab mini-modules in one place: chat, meetings, and community feed.
   const [tab, setTab] = useState("chat");
   const [error, setError] = useState("");
@@ -270,6 +275,23 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     Boolean(activeMeeting) &&
     callSession.active &&
     callSession.meetingId === activeMeeting.id;
+  const collabHighlights = {
+    chat: [
+      `${chatDirectory.length} people in current scope view`,
+      `${selectedBroadcastUsers.length} broadcast recipient${selectedBroadcastUsers.length === 1 ? "" : "s"} selected`,
+      `${chatMessages.length} message${chatMessages.length === 1 ? "" : "s"} in current thread`,
+    ],
+    meetings: [
+      `${visibleMeetings.length} meeting${visibleMeetings.length === 1 ? "" : "s"} in calendar view`,
+      `${acceptedSummaryTodos.length} accepted AI todo${acceptedSummaryTodos.length === 1 ? "" : "s"}`,
+      `${actionItems.length} personal action item${actionItems.length === 1 ? "" : "s"}`,
+    ],
+    feed: [
+      "Global community timeline with per-post privacy",
+      "Posts, reactions, comments, and scoped visibility",
+      "Use community to amplify ministry, state, school, and student voices",
+    ],
+  };
 
   function stopLiveTranscript() {
     // Stop browser speech recognition cleanly.
@@ -417,7 +439,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     }
   }, []);
 
-  async function openMeeting(meetingId) {
+  const openMeeting = useCallback(async (meetingId) => {
     // Open one meeting and hydrate transcript/report details.
     if (!meetingId) return;
     if (callSession.active && callSession.meetingId !== meetingId) {
@@ -446,7 +468,21 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
     } finally {
       setLoadingMeetingDetail(false);
     }
-  }
+  }, [callSession.active, callSession.meetingId]);
+
+  useEffect(() => {
+    if (!navRoute?.ts || navRoute.module !== "collab") return;
+
+    if (navRoute.tab) setTab(navRoute.tab);
+    if (navRoute.action === "create_meeting") {
+      setTab("meetings");
+      setShowCreateMeetingForm(true);
+    }
+    if (navRoute.entityType === "meeting" && navRoute.entityId) {
+      setTab("meetings");
+      openMeeting(navRoute.entityId);
+    }
+  }, [navRoute, openMeeting]);
 
   async function sendDirectMessage(event) {
     // 1-to-1 message send.
@@ -1057,7 +1093,7 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
             }
       }
     >
-      <div className={embedded ? "panel collab-panel" : "modal modal-collab"}>
+      <div className={embedded ? "panel panel-elevated collab-panel" : "modal modal-collab"}>
         <div className="collab-header">
           <div>
             <div className="modal-title">Collaboration Hub</div>
@@ -1077,6 +1113,42 @@ export default function CollaborationHubModal({ user, onClose, embedded = false 
             </button>
           )}
         </div>
+
+        <section className="module-hero module-hero-compact collab-module-hero">
+          <div className="module-hero-copy">
+            <div className="module-kicker">Collaboration</div>
+            <div className="module-title-row">
+              <h2>
+                {tab === "chat"
+                  ? "Chat and Broadcast"
+                  : tab === "meetings"
+                    ? "Meetings, Transcript, and AI Notes"
+                    : "Community Feed"}
+              </h2>
+              <span className="module-pill">
+                {tab === "chat"
+                  ? `${chatDirectory.length} people`
+                  : tab === "meetings"
+                    ? `${visibleMeetings.length} meetings`
+                    : "Live timeline"}
+              </span>
+            </div>
+            <p>
+              {tab === "chat"
+                ? "Hold direct conversations, send broadcasts, and keep message context visible like a real communication workspace."
+                : tab === "meetings"
+                  ? "Create meetings, run calls, capture transcripts, generate AI summaries, and sync accepted actions back into work."
+                  : "See community conversation in one stream and participate without leaving the collaboration module."}
+            </p>
+            <div className="module-highlight-row">
+              {(collabHighlights[tab] || []).map((entry) => (
+                <span key={entry} className="module-highlight-pill">
+                  {entry}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <div className="collab-tabs">
           <button

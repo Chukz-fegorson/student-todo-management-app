@@ -8,7 +8,7 @@ import {
   timeLeft,
 } from "../lib/helpers";
 
-export default function TodoCard({ todo, onEdit, onDelete }) {
+export default function TodoCard({ todo, onEdit, onDelete, highlighted = false }) {
   const ds = deadlineStatus(todo.deadline);
   const ep = effectiveProgress(todo);
   const isGraded = gradeToScore(todo.grade) !== null;
@@ -19,7 +19,7 @@ export default function TodoCard({ todo, onEdit, onDelete }) {
         ds === "overdue" ? "overdue" : ds === "urgent" ? "urgent" : ""
       } ${todo.status === "Graded" ? "done" : ""} ${
         todo.status === "Submitted" ? "submitted" : ""
-      }`}
+      } ${highlighted ? "todo-card-highlighted" : ""}`}
     >
       <div className="card-top">
         <span className={`card-title ${todo.status === "Graded" ? "done-text" : ""}`}>

@@ -193,7 +193,7 @@ function pickDiverseSentences(scoredSentences, limit = 5) {
 
 function extractOwner(sentence) {
   const namedOwnerPattern =
-    /(?:owner|assignee|assigned to)\s*[:\-]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})/i;
+    /(?:owner|assignee|assigned to)\s*[:-]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})/i;
   const leadingOwnerPattern =
     /^([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})\s+(will|should|must|to|needs to)\b/i;
   const inlineOwnerPattern =
@@ -214,7 +214,7 @@ function extractOwner(sentence) {
 
 function extractDue(sentence) {
   const dueMatch = sentence.match(
-    /\b(?:by|before|on|due)\s+([A-Za-z0-9,\-/: ]{2,40})(?=$|[.;])/i
+    /\b(?:by|before|on|due)\s+([A-Za-z0-9,/: -]{2,40})(?=$|[.;])/i
   );
   if (dueMatch?.[1]) return dueMatch[1].trim();
   if (/\btoday\b/i.test(sentence)) return "Today";

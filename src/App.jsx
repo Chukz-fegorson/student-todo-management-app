@@ -8,6 +8,24 @@ import SchoolDashboard from "./pages/SchoolDashboard";
 import ParentDashboard from "./pages/ParentDashboard";
 import AccountModal from "./components/AccountModal";
 import NotificationCenter from "./components/NotificationCenter";
+import CommandPalette from "./components/CommandPalette";
+import { NAVIGATION_EVENT, createNavigationIntent } from "./lib/navigation";
+
+const SHELL_SUMMARIES = {
+  student: "Manage tasks, courses, fees, collaboration, and marketplace activity in one workflow.",
+  parent: "Follow your child's progress, link accounts, and contribute support notes from one place.",
+  school: "Coordinate students, courses, assignments, fees, and operations across your approved scope.",
+  state: "Monitor school performance, engagement, and academic activity across your state's scope.",
+  federal: "Coordinate national education activity, governance insights, and multi-state visibility.",
+};
+
+const SHELL_HEADLINES = {
+  student: "Stay ahead of learning, deadlines, and follow-through.",
+  parent: "See progress early and act before students fall behind.",
+  school: "Run academic operations with a single control surface.",
+  state: "Track system health across schools without losing local context.",
+  federal: "See the broad picture while keeping execution connected.",
+};
 
 // This is the "traffic controller" of the frontend.
 // It decides:
@@ -26,6 +44,18 @@ export default function App() {
   const [accountError, setAccountError] = useState("");
   // Student-only helper banner to finish profile details.
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
+  const [navRoute, setNavRoute] = useState(null);
+  const [notificationSummary, setNotificationSummary] = useState({
+    unreadCount: 0,
+    byModule: {
+      tasks: 0,
+      courses: 0,
+      collab: 0,
+      fees: 0,
+      market: 0,
+      other: 0,
+    },
+  });
 
   function ensureUiInteractive() {
     // Defensive unlock: keep app clickable even if a stale overlay/body state leaks in.
@@ -163,6 +193,24 @@ export default function App() {
     setShowProfilePrompt(isStudentProfileIncomplete(user));
   }, [user]);
 
+  useEffect(() => {
+    function handleNavigationEvent(event) {
+      if (!event?.detail) return;
+      setNavRoute(event.detail);
+    }
+
+    window.addEventListener(NAVIGATION_EVENT, handleNavigationEvent);
+    return () => window.removeEventListener(NAVIGATION_EVENT, handleNavigationEvent);
+  }, []);
+
+  useEffect(() => {
+    if (!navRoute?.ts) return;
+    if (navRoute.action === "open_account_profile") {
+      setAccountError("");
+      setShowAccountModal(true);
+    }
+  }, [navRoute]);
+
   function handleLogout() {
     // Clear token/session and return to auth page.
     clearAllAuth();
@@ -199,22 +247,45 @@ export default function App() {
 
   if (!user) return <AuthPage onLogin={setUser} />;
 
+  function handleNavigate(route) {
+    const next = createNavigationIntent(route);
+    setNavRoute(next);
+    return next;
+  }
+
   // One app, two role-led dashboard experiences.
   const isStudent = user.role === "student";
   const isParent = user.role === "parent";
   const roleLabel = ROLE_LABELS[user.role] || "User";
+  const shellSummary = SHELL_SUMMARIES[user.role] || "StudyFlow workspace";
+  const shellHeadline = SHELL_HEADLINES[user.role] || "Operate StudyFlow from one place.";
+  const scopeLabel =
+    user.schoolName ||
+    user.lgaName ||
+    user.stateName ||
+    user.location ||
+    user.email;
+  const todayLabel = new Date().toLocaleDateString("en-NG", {
+    weekday: "short",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
     <div className="app-shell">
       <nav className="topnav">
-        <div className="nav-logo">StudyFlow</div>
+        <div className="nav-brand">
+          <div className="nav-brand-topline">
+            <div className="nav-logo">StudyFlow</div>
+            <span className="nav-logo-badge">MVP</span>
+          </div>
+          <div className="nav-subtitle">{shellSummary}</div>
+        </div>
 
         <div className="nav-user">
-          <div>
+          <div className="nav-user-copy">
             <div className="nav-name">{user.name}</div>
-            <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>
-              {user.schoolName || user.stateName || user.email}
-            </div>
+            <div className="nav-context">{scopeLabel}</div>
           </div>
 
           <div
@@ -237,7 +308,11 @@ export default function App() {
             {roleLabel}
           </span>
 
-          <NotificationCenter />
+          <CommandPalette user={user} onNavigate={handleNavigate} />
+          <NotificationCenter
+            onNavigate={handleNavigate}
+            onSummaryChange={setNotificationSummary}
+          />
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
@@ -253,35 +328,65 @@ export default function App() {
         </div>
       </nav>
 
-      {showProfilePrompt && (
-        <div className="profile-prompt">
-          <strong>Complete your biodata.</strong> Add your bio, phone, and date of
-          birth so StudyFlow can personalize your student experience.
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => {
-              setAccountError("");
-              setShowAccountModal(true);
-            }}
-          >
-            Update Biodata
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowProfilePrompt(false)}
-          >
-            Later
-          </button>
-        </div>
-      )}
+      <div className="app-body">
+        <section className="shell-banner">
+          <div className="shell-banner-copy">
+            <div className="shell-kicker">{roleLabel} Workspace</div>
+            <h1>{shellHeadline}</h1>
+            <p>{shellSummary}</p>
+          </div>
+          <div className="shell-banner-meta">
+            <div className="shell-meta-card">
+              <span className="shell-meta-label">Current scope</span>
+              <strong>{scopeLabel}</strong>
+            </div>
+            <div className="shell-meta-card">
+              <span className="shell-meta-label">Today</span>
+              <strong>{todayLabel}</strong>
+            </div>
+          </div>
+        </section>
 
-      {isStudent ? (
-        <StudentApp user={user} />
-      ) : isParent ? (
-        <ParentDashboard user={user} />
-      ) : (
-        <SchoolDashboard user={user} />
-      )}
+        {showProfilePrompt && (
+          <div className="profile-prompt">
+            <strong>Complete your biodata.</strong> Add your bio, phone, and date of
+            birth so StudyFlow can personalize your student experience.
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setAccountError("");
+                setShowAccountModal(true);
+              }}
+            >
+              Update Biodata
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowProfilePrompt(false)}
+            >
+              Later
+            </button>
+          </div>
+        )}
+
+        {isStudent ? (
+          <StudentApp
+            user={user}
+            navRoute={navRoute}
+            onNavigate={handleNavigate}
+            notificationSummary={notificationSummary}
+          />
+        ) : isParent ? (
+          <ParentDashboard user={user} navRoute={navRoute} onNavigate={handleNavigate} />
+        ) : (
+          <SchoolDashboard
+            user={user}
+            navRoute={navRoute}
+            onNavigate={handleNavigate}
+            notificationSummary={notificationSummary}
+          />
+        )}
+      </div>
 
       {showAccountModal && (
         <AccountModal

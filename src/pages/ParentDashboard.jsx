@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { effectiveProgress, formatDateTime } from "../lib/helpers";
 import { PARENT_RELATIONSHIP_OPTIONS } from "../lib/constants";
+import WorkspaceOnboarding from "../components/WorkspaceOnboarding";
 
-export default function ParentDashboard({ user }) {
+export default function ParentDashboard({ user, navRoute }) {
   const [children, setChildren] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -78,6 +79,65 @@ export default function ParentDashboard({ user }) {
       : 0;
     return { total, submitted, graded, avgEffective };
   }, [tasks]);
+  const nextDeadlineTask = useMemo(() => {
+    return [...tasks]
+      .filter((task) => task.deadline)
+      .sort(
+        (a, b) =>
+          new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime()
+      )[0] || null;
+  }, [tasks]);
+  const latestReview = reviews[0] || null;
+  const onboardingItems = [
+    {
+      id: "link-child",
+      title: "Link a child account",
+      description: "Use the student email and link code to connect the child profile first.",
+      done: children.length > 0,
+      actionLabel: "Use Link Form",
+      onAction: () => {
+        document.getElementById("parent-link-child-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+    },
+    {
+      id: "review-progress",
+      title: "Review current progress",
+      description: "Open a linked child and inspect tasks, deadlines, and current effective progress.",
+      done: tasks.length > 0,
+      actionLabel: "View Overview",
+      onAction: () => {
+        document.getElementById("parent-child-overview-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+    },
+    {
+      id: "leave-review",
+      title: "Leave a parent review",
+      description: "Add guidance or support notes so the student can see parent feedback in their workspace.",
+      done: reviews.length > 0,
+      actionLabel: "Open Review Form",
+      onAction: () => {
+        document.getElementById("parent-child-overview-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+    },
+  ];
+
+  useEffect(() => {
+    if (navRoute?.action === "focus_link_child" && navRoute?.ts) {
+      document.getElementById("parent-link-child-card")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [navRoute]);
 
   async function linkChild() {
     if (!linkForm.studentEmail.trim() || !linkForm.linkCode.trim()) {
@@ -131,7 +191,7 @@ export default function ParentDashboard({ user }) {
         <div className="empty">
           <div className="empty-icon">...</div>
           <h3>Loading parent workspace</h3>
-          <p>Please wait.</p>
+          <p>Linked children, tasks, and review history are being prepared.</p>
         </div>
       </div>
     );
@@ -139,6 +199,14 @@ export default function ParentDashboard({ user }) {
 
   return (
     <div className="main">
+      <WorkspaceOnboarding
+        user={user}
+        workspaceKey="parent_home"
+        title="Set up the parent workspace"
+        description="Connect a child profile, review real progress, and leave guidance that stays visible to the student."
+        items={onboardingItems}
+      />
+
       {notice && (
         <div className="notif-bar">
           <div className="notif notif-graded" onClick={() => setNotice("")}>
@@ -148,14 +216,67 @@ export default function ParentDashboard({ user }) {
       )}
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="review-banner">
-        <strong>Parent Dashboard</strong> | Link under-18 student accounts, follow progress,
-        and add parent review notes.
-      </div>
+      <section className="module-hero">
+        <div className="module-hero-copy">
+          <div className="module-kicker">Parent Workspace</div>
+          <div className="module-title-row">
+            <h2>Child Progress and Review</h2>
+            <span className="module-pill">
+              {children.length} linked child{children.length === 1 ? "" : "ren"}
+            </span>
+          </div>
+          <p>
+            Link under-18 student accounts, follow deadlines and progress early, and leave guidance that stays close to the student workflow.
+          </p>
+          <div className="module-highlight-row">
+            <span className="module-highlight-pill">
+              {stats.total} task{stats.total === 1 ? "" : "s"} in current child view
+            </span>
+            <span className="module-highlight-pill">
+              {stats.submitted} submitted for review
+            </span>
+            <span className="module-highlight-pill">
+              {reviews.length} parent review{reviews.length === 1 ? "" : "s"} recorded
+            </span>
+          </div>
+        </div>
+      </section>
 
-      <div className="dashboard-grid">
-        <section className="panel">
+      <section className="command-center-card">
+        <div className="command-center-head">
+          <div className="command-center-copy">
+            <div className="panel-kicker">Current focus</div>
+            <h3>
+              {selectedChild
+                ? `${selectedChild.name} is ${stats.avgEffective}% through visible work.`
+                : "Link a child account to start monitoring progress."}
+            </h3>
+            <p>
+              {nextDeadlineTask
+                ? `Next visible deadline: ${nextDeadlineTask.title} on ${formatDateTime(nextDeadlineTask.deadline)}.`
+                : "Once a child is linked, upcoming tasks and deadlines will surface here."}
+            </p>
+          </div>
+          <div className="command-center-actions">
+            <div className="command-metric">
+              <span>Effective progress</span>
+              <strong>{stats.avgEffective}%</strong>
+            </div>
+            <div className="command-metric">
+              <span>Graded work</span>
+              <strong>{stats.graded}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="workspace-grid workspace-grid-parent">
+        <section className="panel panel-elevated" id="parent-link-child-card">
+          <div className="panel-kicker">Connect</div>
           <div className="panel-title">Link Child Account</div>
+          <div className="panel-copy">
+            Use the student email and secure link code to connect a child profile to this parent account.
+          </div>
           <div className="field">
             <label>Student Email</label>
             <input
@@ -228,10 +349,18 @@ export default function ParentDashboard({ user }) {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel panel-elevated" id="parent-child-overview-card">
+          <div className="panel-kicker">Overview</div>
           <div className="panel-title">
             {selectedChild ? `${selectedChild.name} Overview` : "Child Overview"}
           </div>
+          {latestReview && (
+            <div className="insight-card" style={{ marginBottom: "0.9rem" }}>
+              <span className="insight-label">Latest review</span>
+              <strong>{latestReview.parentName || "Parent"}</strong>
+              <p>{latestReview.reviewText}</p>
+            </div>
+          )}
           {!selectedChild ? (
             <div className="empty-col">Select a linked child to view details.</div>
           ) : (

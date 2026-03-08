@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
+import { routeFromNotification } from "../lib/navigation";
+import { buildNotificationSummary } from "../lib/notificationSummary";
 
-export default function NotificationCenter() {
+export default function NotificationCenter({ onNavigate, onSummaryChange }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -10,7 +12,7 @@ export default function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState("");
 
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -20,18 +22,19 @@ export default function NotificationCenter() {
         : [];
       setRows(notifications);
       setUnreadCount(Number(data?.unreadCount || 0));
+      onSummaryChange?.(buildNotificationSummary(notifications));
     } catch (err) {
       setError(err.message || "Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  }
+  }, [onSummaryChange]);
 
   useEffect(() => {
     loadNotifications();
     const timer = window.setInterval(loadNotifications, 20000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [loadNotifications]);
 
   const unreadRows = useMemo(
     () => rows.filter((entry) => !entry.isRead),
@@ -41,7 +44,7 @@ export default function NotificationCenter() {
   async function markOneRead(id) {
     if (!id) return;
     try {
-      await apiPost(`/notifications/${id}/read`, {});
+      const data = await apiPost(`/notifications/${id}/read`, {});
       setRows((prev) =>
         prev.map((entry) =>
           entry.id === id
@@ -50,8 +53,17 @@ export default function NotificationCenter() {
         )
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
+      onSummaryChange?.(
+        buildNotificationSummary(
+          rows.map((entry) =>
+            entry.id === id ? { ...entry, isRead: true } : entry
+          )
+        )
+      );
+      return data?.notification || null;
     } catch (err) {
       setError(err.message || "Failed to mark notification as read");
+      return null;
     }
   }
 
@@ -67,6 +79,9 @@ export default function NotificationCenter() {
         )
       );
       setUnreadCount(0);
+      onSummaryChange?.(
+        buildNotificationSummary(rows.map((entry) => ({ ...entry, isRead: true })))
+      );
     } catch (err) {
       setError(err.message || "Failed to mark all notifications as read");
     } finally {
@@ -125,11 +140,21 @@ export default function NotificationCenter() {
                   type="button"
                   key={entry.id}
                   className={`notif-item ${entry.isRead ? "read" : "unread"}`}
-                  onClick={() => markOneRead(entry.id)}
+                  onClick={async () => {
+                    await markOneRead(entry.id);
+                    const route = routeFromNotification(entry);
+                    if (route && onNavigate) onNavigate(route);
+                    setOpen(false);
+                  }}
                 >
                   <div className="notif-item-head">
                     <strong>{entry.title || "Activity update"}</strong>
                     <small>{formatDateTime(entry.createdAt)}</small>
+                  </div>
+                  <div className="notif-item-meta">
+                    {entry.actorName ? <span>{entry.actorName}</span> : null}
+                    {entry.entityType ? <span>{entry.entityType}</span> : null}
+                    {routeFromNotification(entry) ? <span>Open</span> : null}
                   </div>
                   <div className="notif-item-body">
                     {entry.body || "New activity was recorded."}

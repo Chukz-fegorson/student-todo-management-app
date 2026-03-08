@@ -109,6 +109,25 @@ export default function FeesWorkspace({ user }) {
     () => payments.filter((entry) => entry.status === "PendingConfirmation"),
     [payments]
   );
+  const unpaidInvoices = useMemo(
+    () => invoices.filter((entry) => entry.status === "Unpaid"),
+    [invoices]
+  );
+  const totalOutstandingNaira = useMemo(
+    () =>
+      unpaidInvoices.reduce(
+        (sum, invoice) => sum + amountNairaFromInvoice(invoice),
+        0
+      ),
+    [unpaidInvoices]
+  );
+  const confirmedPayments = useMemo(
+    () =>
+      recentPayments.filter(
+        (entry) => entry.status !== "PendingConfirmation"
+      ),
+    [recentPayments]
+  );
 
   function getPaymentDraft(invoice) {
     const existing = paymentDrafts[invoice.id];
@@ -342,12 +361,43 @@ export default function FeesWorkspace({ user }) {
   }
 
   if (loading) {
-    return <div className="empty-col">Loading fees workspace...</div>;
+    return (
+      <div className="empty">
+        <div className="empty-icon">...</div>
+        <h3>Loading fees workspace</h3>
+        <p>Invoices, plans, and payment records are being prepared.</p>
+      </div>
+    );
   }
 
   return (
-    <section className="panel" style={{ marginTop: "1rem" }}>
-      <div className="panel-title">School Fees & P2P Confirmation</div>
+    <section className="panel panel-elevated module-surface-panel" style={{ marginTop: "1rem" }}>
+      <section className="module-hero module-hero-compact">
+        <div className="module-hero-copy">
+          <div className="module-kicker">Fees</div>
+          <div className="module-title-row">
+            <h2>School Fees and Confirmation</h2>
+            <span className="module-pill">
+              {isStudent ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? "" : "s"}` : `${pendingPayments.length} pending confirmation${pendingPayments.length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+          <p>
+            Keep invoices, payment evidence, receipt confirmation, and downloadable proof of payment inside one workspace.
+          </p>
+          <div className="module-highlight-row">
+            <span className="module-highlight-pill">
+              Outstanding: N{Number(totalOutstandingNaira || 0).toLocaleString()}
+            </span>
+            <span className="module-highlight-pill">
+              {recentPayments.length} payment record{recentPayments.length === 1 ? "" : "s"}
+            </span>
+            <span className="module-highlight-pill">
+              {canManageFees ? `${students.length} student${students.length === 1 ? "" : "s"} in fee scope` : `${confirmedPayments.length} confirmed payment${confirmedPayments.length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+        </div>
+      </section>
+
       {notice && (
         <div className="notif notif-graded" style={{ marginBottom: "0.8rem" }} onClick={() => setNotice("")}>
           {notice}
@@ -356,9 +406,13 @@ export default function FeesWorkspace({ user }) {
       {error && <div className="error-msg">{error}</div>}
 
       {canManageFees && (
-        <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr 1fr" }}>
-          <div className="panel" style={{ margin: 0 }}>
-            <div className="panel-subtitle">Create Fee Plan</div>
+        <div className="workspace-grid workspace-grid-fees-admin" style={{ marginBottom: "1rem" }}>
+          <div className="panel panel-elevated" style={{ margin: 0 }}>
+            <div className="panel-kicker">Configure</div>
+            <div className="panel-title">Create Fee Plan</div>
+            <div className="panel-copy">
+              Define reusable fee plans so invoices can be issued consistently across students.
+            </div>
             <div className="field">
               <label>Plan Title</label>
               <input
@@ -411,8 +465,12 @@ export default function FeesWorkspace({ user }) {
             </button>
           </div>
 
-          <div className="panel" style={{ margin: 0 }}>
-            <div className="panel-subtitle">Issue Invoices</div>
+          <div className="panel panel-elevated" style={{ margin: 0 }}>
+            <div className="panel-kicker">Distribute</div>
+            <div className="panel-title">Issue Invoices</div>
+            <div className="panel-copy">
+              Select a plan or create a custom invoice, then target the exact students who should receive it.
+            </div>
             <div className="field">
               <label>Fee Plan (Optional)</label>
               <select
@@ -492,8 +550,14 @@ export default function FeesWorkspace({ user }) {
         </div>
       )}
 
-      <div style={{ marginTop: "1rem" }}>
-        <div className="panel-subtitle">Invoices ({invoices.length})</div>
+      <div className="panel panel-elevated" style={{ marginTop: canManageFees ? 0 : "0.2rem" }}>
+        <div className="panel-kicker">Invoices</div>
+        <div className="panel-title">Invoices ({invoices.length})</div>
+        <div className="panel-copy">
+          {isStudent
+            ? "Review outstanding invoices, submit payment evidence, and track confirmation status."
+            : "Monitor invoice status across students and keep payment progress visible."}
+        </div>
         <div className="calendar-list">
           {invoices.map((invoice) => (
             <div key={invoice.id} className="review-card">
@@ -661,9 +725,13 @@ export default function FeesWorkspace({ user }) {
       </div>
 
       {canManageFees && (
-        <div style={{ marginTop: "1rem" }}>
-          <div className="panel-subtitle">
+        <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+          <div className="panel-kicker">Verification</div>
+          <div className="panel-title">
             Pending Payment Confirmations ({pendingPayments.length})
+          </div>
+          <div className="panel-copy">
+            Review uploaded evidence, confirm payment, and issue official school receipts from one queue.
           </div>
           <div className="calendar-list">
             {pendingPayments.map((payment) => (
@@ -730,8 +798,12 @@ export default function FeesWorkspace({ user }) {
         </div>
       )}
 
-      <div style={{ marginTop: "1rem" }}>
-        <div className="panel-subtitle">Payment Records ({recentPayments.length})</div>
+      <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+        <div className="panel-kicker">History</div>
+        <div className="panel-title">Payment Records ({recentPayments.length})</div>
+        <div className="panel-copy">
+          Keep a complete trail of submitted, confirmed, and receipted payments with downloadable proof where available.
+        </div>
         <div className="calendar-list">
           {recentPayments.map((payment) => (
             <div key={payment.id} className="review-card">

@@ -23,6 +23,7 @@ import FeesWorkspace from "../components/FeesWorkspace";
 import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import CollaborationHubModal from "../components/CollaborationHubModal";
 import CoursesWorkspace from "../components/CoursesWorkspace";
+import WorkspaceOnboarding from "../components/WorkspaceOnboarding";
 
 // Default shape for "assign task" form.
 const assignmentDefaults = {
@@ -35,6 +36,39 @@ const assignmentDefaults = {
   progress: 0,
   learningSummary: "",
   reminderOffsets: DEFAULT_REMINDER_OFFSETS,
+};
+
+const SCHOOL_MODULE_META = {
+  tasks: {
+    kicker: "Tasks",
+    title: "Assignment and Review Workspace",
+    description:
+      "Assign work, filter your scope, review submissions, and monitor education activity from one control surface.",
+  },
+  courses: {
+    kicker: "Courses",
+    title: "Course Delivery",
+    description:
+      "Create and manage courses, assessments, bundles, and CGPA-linked academic structure in one module.",
+  },
+  collab: {
+    kicker: "Collab Hub",
+    title: "Communication and Meetings",
+    description:
+      "Run meetings, direct chat, community communication, broadcasts, and transcript-driven follow-up from one place.",
+  },
+  fees: {
+    kicker: "Fees",
+    title: "Fees and Confirmation",
+    description:
+      "Track payment evidence, confirm incoming fees, and issue receipts with a cleaner operational flow.",
+  },
+  market: {
+    kicker: "Marketplace",
+    title: "School and Student Commerce",
+    description:
+      "Operate school listings, oversee student commerce, and monitor trust and transaction completion in one space.",
+  },
 };
 
 function toggleId(arr, id) {
@@ -51,7 +85,7 @@ function matchesFilters(item, lgaFilter, schoolFilter) {
 
 // This dashboard is used by school, state, and federal roles.
 // It adapts behavior based on scope and permissions.
-function SchoolDashboard({ user }) {
+function SchoolDashboard({ user, navRoute, notificationSummary }) {
   const [students, setStudents] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [schools, setSchools] = useState([]);
@@ -141,6 +175,111 @@ function SchoolDashboard({ user }) {
   const selectedVisibleCount = selectedStudentIds.filter((id) =>
     visibleStudents.some((student) => student.id === id)
   ).length;
+  const activeModule = SCHOOL_MODULE_META[view] || SCHOOL_MODULE_META.tasks;
+  const visibleSubmittedCount = visibleTasks.filter((task) => task.status === "Submitted").length;
+  const dueSoonCount = visibleTasks.filter((task) => {
+    if (!task.deadline || task.status === "Graded") return false;
+    const deadline = new Date(task.deadline);
+    if (Number.isNaN(deadline.getTime())) return false;
+    const remainingMs = deadline.getTime() - Date.now();
+    return remainingMs >= 0 && remainingMs <= 1000 * 60 * 60 * 24 * 7;
+  }).length;
+  const moduleHighlights = {
+    tasks: [
+      `${visibleStudents.length} visible student${visibleStudents.length === 1 ? "" : "s"}`,
+      `${visibleSubmittedCount} submissions ready for review`,
+      `${dueSoonCount} active deadline${dueSoonCount === 1 ? "" : "s"} this week`,
+    ],
+    courses: [
+      "Manage course structure and assessments",
+      "Support bundles, paid and free delivery",
+      "Keep CGPA-linked grading intact",
+    ],
+    collab: [
+      "Meetings, chat, and community posts",
+      "Broadcast to your approved scope",
+      "Keep transcripts and action points together",
+    ],
+    fees: [
+      "Review fee evidence and issue receipts",
+      "Track payment status by student scope",
+      "Keep school finance actions visible",
+    ],
+    market: [
+      "Run school storefront listings",
+      "Moderate student marketplace activity",
+      "Track ratings, orders, and disputes",
+    ],
+  };
+  const moduleTabCounts = {
+    tasks: (notificationSummary?.byModule?.tasks || 0) + visibleSubmittedCount,
+    courses: notificationSummary?.byModule?.courses || 0,
+    collab: notificationSummary?.byModule?.collab || 0,
+    fees: notificationSummary?.byModule?.fees || 0,
+    market:
+      (notificationSummary?.byModule?.market || 0) +
+      Number(scorecard?.disputeMetrics?.openDisputes || 0),
+  };
+  const onboardingItems = [
+    {
+      id: "students",
+      title: "Verify student scope",
+      description: "Confirm that the students in your current scope are visible before you start assigning work.",
+      done: students.length > 0,
+      actionLabel: "Refresh Scope",
+      onAction: loadDashboard,
+    },
+    {
+      id: "assign-task",
+      title: "Assign the first task",
+      description: "Use the assignment panel to push real work to one or more students.",
+      done: (analytics?.tasksCount || 0) > 0,
+      actionLabel: "Open Tasks",
+      onAction: () => setView("tasks"),
+    },
+    {
+      id: "review-submissions",
+      title: "Review submitted work",
+      description: "Open the review stream and grade submitted tasks so students see feedback quickly.",
+      done: (analytics?.submittedCount || 0) > 0,
+      actionLabel: "Open Review",
+      onAction: () => setView("tasks"),
+    },
+    {
+      id: "fees",
+      title: "Check payment operations",
+      description: "Open fees to create plans, issue invoices, and confirm submitted payments.",
+      done: Number(scorecard?.feeMetrics?.paidAmountNaira || 0) > 0,
+      actionLabel: "Open Fees",
+      onAction: () => setView("fees"),
+    },
+  ];
+
+  useEffect(() => {
+    if (!navRoute?.ts) return;
+
+    const nextModule = navRoute.module;
+    if (["tasks", "courses", "collab", "fees", "market"].includes(nextModule)) {
+      setView(nextModule);
+    }
+
+    if (nextModule === "tasks") {
+      if (navRoute.action === "assign_task") {
+        setView("tasks");
+      }
+      if (navRoute.entityType === "task" && navRoute.entityId) {
+        const targetTask = tasks.find((entry) => entry.id === navRoute.entityId);
+        if (targetTask && (targetTask.status === "Submitted" || targetTask.grade)) {
+          setStatusFilter("All");
+          setGradeModal({
+            id: targetTask.id,
+            studentName: targetTask.studentName,
+            task: targetTask,
+          });
+        }
+      }
+    }
+  }, [navRoute, tasks]);
 
   async function assignTask() {
     // Guardrails first, then submit assignment payload.
@@ -208,8 +347,8 @@ function SchoolDashboard({ user }) {
       <div className="main">
         <div className="empty">
           <div className="empty-icon">...</div>
-          <h3>Loading dashboard</h3>
-          <p>Please wait.</p>
+          <h3>Loading your operational workspace</h3>
+          <p>Students, tasks, schools, and analytics are being prepared.</p>
         </div>
       </div>
     );
@@ -217,38 +356,111 @@ function SchoolDashboard({ user }) {
 
   return (
     <div className="main">
+      <WorkspaceOnboarding
+        user={user}
+        workspaceKey="school_home"
+        title="Prepare your operations workspace"
+        description="Complete these setup actions so assignment delivery, courses, collaboration, and payments all have a clean starting point."
+        items={onboardingItems}
+      />
+
       <div className="view-tabs module-tabs">
         <button
           className={`view-tab module-tab ${view === "tasks" ? "active" : ""}`}
           onClick={() => setView("tasks")}
         >
           Tasks
+          {moduleTabCounts.tasks > 0 && (
+            <span className="module-tab-badge">{moduleTabCounts.tasks}</span>
+          )}
         </button>
         <button
           className={`view-tab module-tab ${view === "courses" ? "active" : ""}`}
           onClick={() => setView("courses")}
         >
           Courses
+          {moduleTabCounts.courses > 0 && (
+            <span className="module-tab-badge">{moduleTabCounts.courses}</span>
+          )}
         </button>
         <button
           className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
           onClick={() => setView("collab")}
         >
           Collab Hub
+          {moduleTabCounts.collab > 0 && (
+            <span className="module-tab-badge">{moduleTabCounts.collab}</span>
+          )}
         </button>
         <button
           className={`view-tab module-tab ${view === "fees" ? "active" : ""}`}
           onClick={() => setView("fees")}
         >
           Fees
+          {moduleTabCounts.fees > 0 && (
+            <span className="module-tab-badge">{moduleTabCounts.fees}</span>
+          )}
         </button>
         <button
           className={`view-tab module-tab ${view === "market" ? "active" : ""}`}
           onClick={() => setView("market")}
         >
           Marketplace
+          {moduleTabCounts.market > 0 && (
+            <span className="module-tab-badge">{moduleTabCounts.market}</span>
+          )}
         </button>
       </div>
+
+      <section className="module-hero">
+        <div className="module-hero-copy">
+          <div className="module-kicker">{activeModule.kicker}</div>
+          <div className="module-title-row">
+            <h2>{activeModule.title}</h2>
+            <span className="module-pill">
+              {view === "tasks"
+                ? `${filteredTasks.length} filtered task${filteredTasks.length === 1 ? "" : "s"}`
+                : view === "courses"
+                  ? "Academic delivery"
+                  : view === "collab"
+                    ? "Live workspace"
+                    : view === "fees"
+                      ? "Payment operations"
+                      : "Trust and commerce"}
+            </span>
+          </div>
+          <p>{activeModule.description}</p>
+          <div className="module-highlight-row">
+            {moduleHighlights[view].map((entry) => (
+              <span key={entry} className="module-highlight-pill">
+                {entry}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {view === "tasks" && (
+          <div className="module-actions">
+            <button className="btn btn-primary" onClick={assignTask}>
+              Assign Selected
+            </button>
+            <button className="btn btn-ghost" onClick={loadDashboard}>
+              Refresh
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() =>
+                exportTasksToCalendar(
+                  visibleTasks.filter((task) => task.deadline),
+                  `${user.role}-tasks.ics`
+                )
+              }
+            >
+              Export Calendar (.ics)
+            </button>
+          </div>
+        )}
+      </section>
 
       {notice && (
         <div className="notif-bar">
@@ -261,14 +473,47 @@ function SchoolDashboard({ user }) {
       {error && <div className="error-msg">{error}</div>}
 
       {view === "tasks" && (
-        <div className="review-banner">
-          <strong>{roleLabel} Dashboard</strong> | Assign tasks, review submissions,
-          grade students, and track progress across your permitted scope.
-        </div>
-      )}
-
-      {view === "tasks" && (
         <>
+          <section className="command-center-card">
+            <div className="command-center-head">
+              <div className="command-center-copy">
+                <div className="panel-kicker">{roleLabel} control</div>
+                <h3>Assign, review, and monitor from one task workspace.</h3>
+                <p>
+                  Narrow scope with filters, select students in context, and keep submitted work visible until grading is complete.
+                </p>
+              </div>
+              <div className="command-center-actions">
+                <div className="command-metric">
+                  <span>Visible students</span>
+                  <strong>{visibleStudents.length}</strong>
+                </div>
+                <div className="command-metric">
+                  <span>Ready to review</span>
+                  <strong>{visibleSubmittedCount}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="command-strip">
+              <article className="command-tile">
+                <span className="command-tile-label">Selected</span>
+                <strong>{selectedStudentIds.length}</strong>
+                <p>Students queued for the current assignment.</p>
+              </article>
+              <article className="command-tile">
+                <span className="command-tile-label">Scope</span>
+                <strong>{visibleTasks.length}</strong>
+                <p>Tasks visible under the current school and LGA filter.</p>
+              </article>
+              <article className="command-tile">
+                <span className="command-tile-label">School reach</span>
+                <strong>{schoolFilter === "all" ? schools.length : 1}</strong>
+                <p>School group{schoolFilter === "all" ? "s" : ""} currently in view.</p>
+              </article>
+            </div>
+          </section>
+
           <div className="stats-bar stats-bar-teacher">
             <div className="stat-card">
               <div className="stat-label">Students</div>
@@ -341,7 +586,7 @@ function SchoolDashboard({ user }) {
             </div>
           </div>
 
-          <div className="toolbar">
+          <div className="toolbar toolbar-panel">
             <div className="filter-wrap">
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="All">All Statuses</option>
@@ -375,38 +620,32 @@ function SchoolDashboard({ user }) {
               )}
             </div>
 
-            <button className="btn btn-ghost" onClick={loadDashboard}>
-              Refresh
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={() =>
-                exportTasksToCalendar(
-                  visibleTasks.filter((task) => task.deadline),
-                  `${user.role}-tasks.ics`
-                )
-              }
-            >
-              Export Calendar (.ics)
-            </button>
+            <div className="toolbar-spacer" />
+            <div className="calendar-meta">
+              Filtering {filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"} in scope
+            </div>
           </div>
         </>
       )}
 
       {view === "courses" ? (
-        <CoursesWorkspace user={user} />
+        <CoursesWorkspace user={user} navRoute={navRoute} />
       ) : view === "fees" ? (
-        <FeesWorkspace user={user} />
+        <FeesWorkspace user={user} navRoute={navRoute} />
       ) : view === "market" ? (
-        <MarketplaceWorkspace user={user} />
+        <MarketplaceWorkspace user={user} navRoute={navRoute} />
       ) : view === "collab" ? (
         // Shared collab module for school/governance users.
-        <CollaborationHubModal user={user} embedded />
+        <CollaborationHubModal user={user} embedded navRoute={navRoute} />
       ) : (
         <>
-      <div className="dashboard-grid">
-        <section className="panel">
+      <div className="workspace-grid workspace-grid-school">
+        <section className="panel panel-elevated">
+          <div className="panel-kicker">Create work</div>
           <div className="panel-title">Assign Task</div>
+          <div className="panel-copy">
+            Build the assignment once, then push it to selected students inside the current scope.
+          </div>
 
           <div className="field">
             <label>Title *</label>
@@ -592,9 +831,13 @@ function SchoolDashboard({ user }) {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel panel-elevated">
+          <div className="panel-kicker">Review stream</div>
           <div className="panel-title">
             Review / Monitor Tasks ({filteredTasks.length})
+          </div>
+          <div className="panel-copy">
+            Follow submissions, grading status, deadlines, and effective progress without leaving the review list.
           </div>
 
           <div className="calendar-list">
@@ -663,7 +906,8 @@ function SchoolDashboard({ user }) {
       </div>
 
       {isStateOrFederal && (
-        <section className="panel" style={{ marginTop: "1rem" }}>
+        <section className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+          <div className="panel-kicker">Coverage map</div>
           <div className="panel-title">Schools Grouped by LGA</div>
           {Object.keys(schoolsByLga).length ? (
             Object.entries(schoolsByLga).map(([lgaName, lgaSchools]) => (

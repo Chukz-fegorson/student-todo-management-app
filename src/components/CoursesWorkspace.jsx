@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
+import WorkspaceOnboarding from "./WorkspaceOnboarding";
 
 const AUTHOR_ROLES = new Set(["school", "state", "federal"]);
 
@@ -60,7 +61,7 @@ function toggleId(list, id) {
   return list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id];
 }
 
-export default function CoursesWorkspace({ user }) {
+export default function CoursesWorkspace({ user, navRoute }) {
   const isAuthor = AUTHOR_ROLES.has(user.role);
   const isStudent = user.role === "student";
 
@@ -98,7 +99,7 @@ export default function CoursesWorkspace({ user }) {
     return map;
   }, [cgpaSummary]);
 
-  async function loadWorkspace() {
+  const loadWorkspace = useCallback(async () => {
     try {
       setError("");
       setLoading(true);
@@ -116,7 +117,7 @@ export default function CoursesWorkspace({ user }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [isAuthor, isStudent]);
 
   async function loadCourseDetails(courseId) {
     if (!courseId) return setDetails(null);
@@ -147,7 +148,7 @@ export default function CoursesWorkspace({ user }) {
 
   useEffect(() => {
     loadWorkspace();
-  }, [user.id]);
+  }, [loadWorkspace]);
 
   useEffect(() => {
     if (!courses.length) {
@@ -376,16 +377,113 @@ export default function CoursesWorkspace({ user }) {
     }
   }
 
-  if (loading) return <div className="empty-col">Loading courses...</div>;
+  useEffect(() => {
+    if (!navRoute?.ts) return;
+    if (navRoute.module !== "courses") return;
+    if (navRoute.entityType === "course" && navRoute.entityId) {
+      setSelectedCourseId(navRoute.entityId);
+    }
+  }, [navRoute]);
 
-  const currentSelectedSummary = selectedCourseSummaryById.get(selectedCourseId) || null;
+  const onboardingItems = [
+    {
+      id: "course-selection",
+      title: isStudent ? "Select a course" : "Create the first course",
+      description: isStudent
+        ? "Choose a course so CGPA and assessment tracking can begin."
+        : "Create a course so academic work can move beyond isolated tasks.",
+      done: isStudent
+        ? Number(cgpaSummary?.selectedCoursesCount || 0) > 0
+        : courses.length > 0,
+      actionLabel: isStudent ? "Review Courses" : "Create Course",
+      onAction: () => {
+        document.getElementById("courses-list-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+    },
+    {
+      id: "assessment",
+      title: isStudent ? "Open an assessment" : "Create an assessment",
+      description: isStudent
+        ? "Open a course assessment and start attempting practical work."
+        : "Attach assessments so the course has measurable academic outcomes.",
+      done: Boolean(details?.assessments?.length || activeAssessment),
+      actionLabel: "Open Workspace",
+      onAction: () => {
+        document.getElementById("courses-detail-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="empty">
+        <div className="empty-icon">...</div>
+        <h3>Loading courses workspace</h3>
+        <p>Courses, bundles, assessments, and CGPA summaries are being prepared.</p>
+      </div>
+    );
+  }
+
   const courseNeedsPayment =
     details?.course &&
     (details.course.pricingType === "paid" || details.course.pricingType === "bundle");
+  const activeCoursesCount = Number(cgpaSummary?.activeCoursesCount || 0);
+  const courseProgress = Number(cgpaSummary?.overallCourseProgress || 0);
 
   return (
-    <div className="dashboard-grid courses-grid">
-      <section className="panel">
+    <>
+      <WorkspaceOnboarding
+        user={user}
+        workspaceKey={`courses_${isStudent ? "student" : "author"}`}
+        title="Set up course delivery"
+        description="Use this workspace to structure learning, practical tests, grading weight, and enrollment flow."
+        items={onboardingItems}
+      />
+
+      <section className="module-hero module-hero-compact">
+        <div className="module-hero-copy">
+          <div className="module-kicker">Courses</div>
+          <div className="module-title-row">
+            <h2>{isStudent ? "Learning and Assessment" : "Course Delivery and Structure"}</h2>
+            <span className="module-pill">
+              {courses.length} course{courses.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p>
+            {isStudent
+              ? "Select courses, unlock paid content where needed, attempt assessments, and keep CGPA-linked progress visible."
+              : "Create courses, modules, assessments, questions, and bundles from one academic delivery workspace."}
+          </p>
+          <div className="module-highlight-row">
+            <span className="module-highlight-pill">
+              {bundles.length} bundle{bundles.length === 1 ? "" : "s"}
+            </span>
+            {isStudent ? (
+              <>
+                <span className="module-highlight-pill">
+                  {activeCoursesCount} active course{activeCoursesCount === 1 ? "" : "s"}
+                </span>
+                <span className="module-highlight-pill">
+                  CGPA {Number(cgpaSummary?.cgpa || 0).toFixed(2)} | Progress {courseProgress}%
+                </span>
+              </>
+            ) : (
+              <span className="module-highlight-pill">
+                {students.length} student{students.length === 1 ? "" : "s"} in author scope
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <div className="dashboard-grid courses-grid">
+      <section className="panel panel-elevated" id="courses-list-card">
         <div className="panel-title">Courses ({courses.length})</div>
         {notice && <div className="info-msg">{notice}</div>}
         {error && <div className="error-msg">{error}</div>}
@@ -436,7 +534,7 @@ export default function CoursesWorkspace({ user }) {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel panel-elevated" id="courses-detail-card">
         {!details ? (
           <div className="empty-col">Select a course to continue.</div>
         ) : (
@@ -618,6 +716,7 @@ export default function CoursesWorkspace({ user }) {
           </>
         )}
       </section>
-    </div>
+      </div>
+    </>
   );
 }

@@ -4,16 +4,24 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 async function request(path, options = {}) {
   const token = getToken();
+  let response;
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method: options.method || "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch {
+    // Surface a stable message when the API is down or blocked by the browser.
+    throw new Error(
+      `Cannot reach StudyFlow backend at ${BASE_URL}. Check that the server is running and CORS is configured for this frontend origin.`
+    );
+  }
 
   const text = await response.text();
   let payload = null;

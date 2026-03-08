@@ -65,7 +65,7 @@ function marketChipMeta(product) {
   return { label: "Student Market", className: "market-card-chip-student" };
 }
 
-export default function MarketplaceWorkspace({ user }) {
+export default function MarketplaceWorkspace({ user, navRoute }) {
   // Marketplace state buckets: catalog data, ui states, and form drafts.
   const [categories, setCategories] = useState([]);
   const [categoryRequests, setCategoryRequests] = useState([]);
@@ -153,6 +153,36 @@ export default function MarketplaceWorkspace({ user }) {
     if (filtersDraft.state) discovered.add(filtersDraft.state);
     return Array.from(discovered).sort((a, b) => a.localeCompare(b));
   }, [products, filtersDraft.state]);
+  const myListingCount = useMemo(
+    () => products.filter((entry) => entry.sellerUserId === user.id).length,
+    [products, user.id]
+  );
+  const openDisputeCount = useMemo(
+    () => disputes.filter((entry) => entry.status === "Open").length,
+    [disputes]
+  );
+  const marketHighlights = {
+    browse: [
+      `${products.length} product${products.length === 1 ? "" : "s"} visible`,
+      `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
+      `${openDisputeCount} open dispute${openDisputeCount === 1 ? "" : "s"}`,
+    ],
+    sell: [
+      `${myListingCount} of your listing${myListingCount === 1 ? "" : "s"} visible`,
+      `${categories.length} approved categor${categories.length === 1 ? "y" : "ies"}`,
+      canSell ? "Create, upload media, and publish in one flow" : "Browse only",
+    ],
+    orders: [
+      `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
+      `${completedOrders.length} completed transaction${completedOrders.length === 1 ? "" : "s"}`,
+      `${disputes.length} dispute record${disputes.length === 1 ? "" : "s"}`,
+    ],
+    moderation: [
+      `${categoryRequests.length} category request${categoryRequests.length === 1 ? "" : "s"}`,
+      `${openDisputeCount} open dispute${openDisputeCount === 1 ? "" : "s"}`,
+      "Review reports and keep marketplace trust intact",
+    ],
+  };
 
   const loadMarketplace = useCallback(async () => {
     // Load categories/products/orders (and moderation queue when allowed).
@@ -211,6 +241,30 @@ export default function MarketplaceWorkspace({ user }) {
   useEffect(() => {
     setReviewDraft({ rating: 5, reviewText: "" });
   }, [selectedProductId]);
+
+  useEffect(() => {
+    if (!navRoute?.ts || navRoute.module !== "market") return;
+
+    if (navRoute.meta?.view) {
+      setMarketView(navRoute.meta.view);
+      if (navRoute.meta.view !== "browse") closeProduct();
+    }
+    if (navRoute.action === "sell") {
+      setMarketView("sell");
+      closeProduct();
+    }
+    if (navRoute.action === "orders") {
+      setMarketView("orders");
+      closeProduct();
+    }
+    if (navRoute.entityType === "market_product" && navRoute.entityId) {
+      const target = products.find((entry) => entry.id === navRoute.entityId);
+      if (target) {
+        setMarketView("browse");
+        openProduct(target);
+      }
+    }
+  }, [navRoute, products]);
 
   function applyFilters() {
     // Apply current filter draft to trigger fresh product query.
@@ -593,11 +647,46 @@ export default function MarketplaceWorkspace({ user }) {
     }
   }
 
-  if (loading) return <div className="empty-col">Loading marketplace workspace...</div>;
+  if (loading) {
+    return (
+      <div className="empty">
+        <div className="empty-icon">...</div>
+        <h3>Loading marketplace workspace</h3>
+        <p>Products, orders, disputes, and category data are being prepared.</p>
+      </div>
+    );
+  }
 
   return (
-    <section className="panel market-panel" style={{ marginTop: "1rem" }}>
-      <div className="panel-title">Marketplace (School + Student-to-Student)</div>
+    <section className="panel panel-elevated market-panel module-surface-panel" style={{ marginTop: "1rem" }}>
+      <section className="module-hero module-hero-compact">
+        <div className="module-hero-copy">
+          <div className="module-kicker">Marketplace</div>
+          <div className="module-title-row">
+            <h2>School and Student Commerce</h2>
+            <span className="module-pill">
+              {marketView === "browse"
+                ? `${products.length} visible`
+                : marketView === "sell"
+                  ? "Seller workspace"
+                  : marketView === "orders"
+                    ? `${activeOrders.length} active`
+                    : `${categoryRequests.length} pending`}
+            </span>
+          </div>
+          <p>
+            Browse trusted listings, manage sales, complete claim-code transactions, and review disputes from one commerce workspace.
+          </p>
+          <div className="module-highlight-row">
+            {(marketHighlights[marketView] || marketHighlights.browse).map((entry) => (
+              <span key={entry} className="module-highlight-pill">
+                {entry}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {notice && (
         <div
           className="notif notif-graded"
@@ -641,7 +730,12 @@ export default function MarketplaceWorkspace({ user }) {
       </div>
 
       {marketView === "browse" && (
-        <>
+        <div className="panel panel-elevated market-filter-shell" style={{ marginBottom: "1rem" }}>
+          <div className="panel-kicker">Browse</div>
+          <div className="panel-title">Find Products</div>
+          <div className="panel-copy">
+            Filter by location, listing type, and proximity to narrow the marketplace quickly.
+          </div>
           <div className="market-filter-bar">
         <input
           placeholder="Search products"
@@ -718,12 +812,16 @@ export default function MarketplaceWorkspace({ user }) {
           Reset
         </button>
           </div>
-        </>
+        </div>
       )}
 
       {marketView === "sell" && canSell && (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
-          <div className="panel-subtitle">Create Listing ({listingType})</div>
+        <div className="panel panel-elevated" style={{ marginBottom: "1rem" }}>
+          <div className="panel-kicker">Sell</div>
+          <div className="panel-title">Create Listing ({listingType})</div>
+          <div className="panel-copy">
+            Publish a product with rich media, standardized categories, and enough detail to make it easy to buy.
+          </div>
           <div className="field">
             <label>Title</label>
             <input
@@ -898,8 +996,9 @@ export default function MarketplaceWorkspace({ user }) {
       )}
 
       {marketView === "sell" && user.role === "student" && (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
-          <div className="panel-subtitle">Request New Student Category</div>
+        <div className="panel panel-elevated" style={{ marginBottom: "1rem" }}>
+          <div className="panel-kicker">Categories</div>
+          <div className="panel-title">Request New Student Category</div>
           <div style={{ display: "flex", gap: "0.6rem" }}>
             <input
               style={{ flex: 1 }}
@@ -915,8 +1014,12 @@ export default function MarketplaceWorkspace({ user }) {
       )}
 
       {marketView === "moderation" && canModerate && (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
-          <div className="panel-subtitle">Pending Category Requests ({categoryRequests.length})</div>
+        <div className="panel panel-elevated" style={{ marginBottom: "1rem" }}>
+          <div className="panel-kicker">Moderation</div>
+          <div className="panel-title">Pending Category Requests ({categoryRequests.length})</div>
+          <div className="panel-copy">
+            Review category expansion requests and keep the marketplace structure disciplined.
+          </div>
           <div className="calendar-list">
             {categoryRequests.map((entry) => (
               <div key={entry.id} className="calendar-item">
@@ -952,7 +1055,8 @@ export default function MarketplaceWorkspace({ user }) {
 
       {marketView === "browse" && (
         <>
-          <div className="panel-subtitle">Products ({products.length})</div>
+          <div className="panel-kicker">Catalog</div>
+          <div className="panel-title">Products ({products.length})</div>
           <div className="market-grid">
         {products.map((product) => {
           const mine = product.sellerUserId === user.id;
@@ -1040,8 +1144,12 @@ export default function MarketplaceWorkspace({ user }) {
 
       {marketView === "orders" && (
         <>
-          <div style={{ marginTop: "1rem" }}>
-        <div className="panel-subtitle">Active Orders ({activeOrders.length})</div>
+          <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+        <div className="panel-kicker">Orders</div>
+        <div className="panel-title">Active Orders ({activeOrders.length})</div>
+        <div className="panel-copy">
+          Track payment confirmation, claim codes, disputes, and delivery flow without leaving the order stream.
+        </div>
         <div className="calendar-list">
           {activeOrders.map((order) => {
             const isSeller = order.sellerUserId === user.id;
@@ -1144,8 +1252,9 @@ export default function MarketplaceWorkspace({ user }) {
         </div>
           </div>
 
-          <div style={{ marginTop: "1rem" }}>
-            <div className="panel-subtitle">Completed Transactions ({completedOrders.length})</div>
+          <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+            <div className="panel-kicker">History</div>
+            <div className="panel-title">Completed Transactions ({completedOrders.length})</div>
             <div className="calendar-list">
               {completedOrders.map((order) => (
                 <div key={order.id} className="review-card">
@@ -1177,8 +1286,9 @@ export default function MarketplaceWorkspace({ user }) {
             </div>
           </div>
 
-          <div style={{ marginTop: "1rem" }}>
-            <div className="panel-subtitle">Disputes ({disputes.length})</div>
+          <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+            <div className="panel-kicker">Trust</div>
+            <div className="panel-title">Disputes ({disputes.length})</div>
             <div className="calendar-list">
               {disputes.map((dispute) => (
                 <div key={dispute.id} className="review-card">

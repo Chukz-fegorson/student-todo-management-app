@@ -65,6 +65,15 @@ export function routeFromNotification(notification) {
         entityType,
         entityId,
       });
+    case "fee_invoice":
+    case "fee_payment":
+    case "invoice":
+    case "payment":
+      return createNavigationIntent({
+        module: "fees",
+        entityType,
+        entityId,
+      });
     case "student_parent_review":
       return createNavigationIntent({
         module: "tasks",
@@ -72,8 +81,23 @@ export function routeFromNotification(notification) {
         entityType,
         entityId,
       });
+    case "market_product":
+      return createNavigationIntent({
+        module: "market",
+        entityType,
+        entityId,
+      });
+    case "market_order":
+    case "market_dispute":
+    case "order":
+      return createNavigationIntent({
+        module: "market",
+        action: "orders",
+        entityType,
+        entityId,
+        meta: { view: "orders" },
+      });
     default:
       return null;
   }
 }
-

@@ -1,4 +1,4 @@
-import { normalizeReminderOffsets } from "./helpers";
+import { normalizeReminderOffsets } from "./helpers.js";
 
 function toIcsUtc(dateLike) {
   const dt = new Date(dateLike);

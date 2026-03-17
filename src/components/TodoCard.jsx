@@ -12,6 +12,32 @@ export default function TodoCard({ todo, onEdit, onDelete, highlighted = false }
   const ds = deadlineStatus(todo.deadline);
   const ep = effectiveProgress(todo);
   const isGraded = gradeToScore(todo.grade) !== null;
+  const contextLabel =
+    todo.status === "Submitted"
+      ? "Awaiting Review"
+      : todo.status === "Graded"
+        ? "Reviewed"
+        : ds === "overdue"
+          ? "Overdue"
+          : ds === "urgent"
+            ? "Due Soon"
+            : ds === "soon"
+              ? "Upcoming"
+              : "On Track";
+  const contextTone =
+    todo.status === "Submitted"
+      ? "submitted"
+      : todo.status === "Graded"
+        ? "graded"
+        : ds === "overdue"
+          ? "overdue"
+          : ds === "urgent"
+            ? "urgent"
+            : ds === "soon"
+              ? "soon"
+              : "ok";
+  const summaryTitle = todo.learningSummary ? "Learning Summary" : "Review Note";
+  const summaryText = todo.learningSummary || todo.gradeFeedback || "";
 
   return (
     <div
@@ -22,13 +48,16 @@ export default function TodoCard({ todo, onEdit, onDelete, highlighted = false }
       } ${highlighted ? "todo-card-highlighted" : ""}`}
     >
       <div className="card-top">
-        <span className={`card-title ${todo.status === "Graded" ? "done-text" : ""}`}>
-          {todo.title}
-        </span>
+        <div className="card-context-row">
+          <span className={`card-context-pill card-context-${contextTone}`}>
+            {contextLabel}
+          </span>
+          {todo.grade && <GradeChip grade={todo.grade} />}
+        </div>
         <div className="card-actions">
           <button
             type="button"
-            className="btn-icon"
+            className="card-action-btn"
             onClick={() => onEdit(todo)}
             title="Edit task"
           >
@@ -36,7 +65,7 @@ export default function TodoCard({ todo, onEdit, onDelete, highlighted = false }
           </button>
           <button
             type="button"
-            className="btn-icon"
+            className="card-action-btn card-action-btn-danger"
             onClick={() => onDelete(todo)}
             title="Delete task"
           >
@@ -45,34 +74,37 @@ export default function TodoCard({ todo, onEdit, onDelete, highlighted = false }
         </div>
       </div>
 
+      <div className={`card-title ${todo.status === "Graded" ? "done-text" : ""}`}>
+        {todo.title}
+      </div>
+
       {todo.description && (
         <div className="card-desc">
-          {todo.description.slice(0, 120)}
-          {todo.description.length > 120 ? "..." : ""}
+          {todo.description.slice(0, 110)}
+          {todo.description.length > 110 ? "..." : ""}
+        </div>
+      )}
+
+      {todo.deadline && (
+        <div className={`card-deadline-block card-deadline-${contextTone}`}>
+          <span className="card-deadline-label">Deadline</span>
+          <strong>{formatDateTime(todo.deadline)}</strong>
+          <span>{timeLeft(todo.deadline)}</span>
         </div>
       )}
 
       <div className="card-meta">
         <span className="badge badge-cat">{todo.category}</span>
         <PriBadge p={todo.priority} />
-        {todo.status === "Submitted" && (
-          <span className="badge badge-submitted">Submitted</span>
-        )}
-        {todo.status === "Graded" && <span className="badge badge-submitted">Graded</span>}
-        {todo.deadline && (
-          <span className={`badge badge-deadline ${ds}`}>
-            {formatDateTime(todo.deadline)} | {timeLeft(todo.deadline)}
-          </span>
-        )}
-        {todo.grade && <GradeChip grade={todo.grade} />}
+        {!todo.deadline && <span className="badge badge-soft">No deadline</span>}
       </div>
 
-      {todo.learningSummary && (
+      {summaryText && (
         <div className="card-summary">
-          <div className="card-summary-label">Learning Summary</div>
-          {todo.learningSummary.slice(0, 130)}
-          {todo.learningSummary.length > 130 ? "..." : ""}
-          {todo.gradeFeedback && (
+          <div className="card-summary-label">{summaryTitle}</div>
+          {summaryText.slice(0, 130)}
+          {summaryText.length > 130 ? "..." : ""}
+          {todo.learningSummary && todo.gradeFeedback && (
             <div className="grade-feedback-italic">
               Feedback: {todo.gradeFeedback.slice(0, 120)}
               {todo.gradeFeedback.length > 120 ? "..." : ""}

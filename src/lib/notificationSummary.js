@@ -26,11 +26,23 @@ export function buildNotificationSummary(notifications = []) {
       byModule.collab += 1;
       return;
     }
-    if (entityType === "fee" || entityType === "invoice" || entityType === "payment") {
+    if (
+      entityType === "fee" ||
+      entityType === "invoice" ||
+      entityType === "payment" ||
+      entityType === "fee_invoice" ||
+      entityType === "fee_payment"
+    ) {
       byModule.fees += 1;
       return;
     }
-    if (entityType === "market" || entityType === "market_product" || entityType === "order") {
+    if (
+      entityType === "market" ||
+      entityType === "market_product" ||
+      entityType === "market_order" ||
+      entityType === "market_dispute" ||
+      entityType === "order"
+    ) {
       byModule.market += 1;
       return;
     }
@@ -42,4 +54,3 @@ export function buildNotificationSummary(notifications = []) {
     byModule,
   };
 }
-

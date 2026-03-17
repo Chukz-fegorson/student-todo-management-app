@@ -41,25 +41,34 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 
 ## Local Setup
 
-### 1) Backend
+### 1) Recommended dev start
 
-1. `cd server`
-2. Copy `.env.example` to `.env`
-3. Set `DATABASE_URL` and `JWT_SECRET`
-4. Set privileged signup keys if you want to create governance accounts:
+1. From project root, run `npm run dev`
+2. The root dev runner will check `http://localhost:4000/health`
+3. If the backend is not already running, it starts `server/` automatically
+4. Once the backend is healthy, it starts the Vite frontend
+
+If PowerShell blocks `npm`, use `npm.cmd run dev` instead.
+
+### 2) Backend only
+
+1. Copy `server/.env.example` to `server/.env`
+2. Set `DATABASE_URL` and `JWT_SECRET`
+3. Set privileged signup keys if you want to create governance accounts:
    - `SCHOOL_SIGNUP_KEY`
    - `STATE_SIGNUP_KEY`
    - `FEDERAL_SIGNUP_KEY`
-5. Install dependencies: `npm install`
-6. Start server: `npm run dev`
+4. Install dependencies: `npm install`
+5. Start the backend from project root: `npm run backend`
+6. If you want auto-restart while editing backend files, run `npm run backend:watch`
 
 Backend runs at `http://localhost:4000`.
 
-### 2) Frontend
+### 3) Frontend only
 
 1. From project root, install dependencies: `npm install`
 2. (Optional) set `VITE_API_URL` in a root `.env` if backend URL differs
-3. Start frontend: `npm run dev`
+3. Start only the Vite frontend: `npm run frontend`
 
 Frontend defaults to `http://localhost:5173`.
 

@@ -27,6 +27,14 @@ export default function ParentDashboard({ user, navRoute }) {
     () => children.find((child) => child.id === selectedChildId) || null,
     [children, selectedChildId]
   );
+  const hasLinkedChildren = children.length > 0;
+
+  function scrollToCard(id) {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
 
   async function loadChildren() {
     try {
@@ -95,12 +103,7 @@ export default function ParentDashboard({ user, navRoute }) {
       description: "Use the student email and link code to connect the child profile first.",
       done: children.length > 0,
       actionLabel: "Use Link Form",
-      onAction: () => {
-        document.getElementById("parent-link-child-card")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      },
+      onAction: () => scrollToCard("parent-link-child-card"),
     },
     {
       id: "review-progress",
@@ -108,12 +111,7 @@ export default function ParentDashboard({ user, navRoute }) {
       description: "Open a linked child and inspect tasks, deadlines, and current effective progress.",
       done: tasks.length > 0,
       actionLabel: "View Overview",
-      onAction: () => {
-        document.getElementById("parent-child-overview-card")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      },
+      onAction: () => scrollToCard("parent-child-overview-card"),
     },
     {
       id: "leave-review",
@@ -121,21 +119,13 @@ export default function ParentDashboard({ user, navRoute }) {
       description: "Add guidance or support notes so the student can see parent feedback in their workspace.",
       done: reviews.length > 0,
       actionLabel: "Open Review Form",
-      onAction: () => {
-        document.getElementById("parent-child-overview-card")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      },
+      onAction: () => scrollToCard("parent-child-overview-card"),
     },
   ];
 
   useEffect(() => {
     if (navRoute?.action === "focus_link_child" && navRoute?.ts) {
-      document.getElementById("parent-link-child-card")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollToCard("parent-link-child-card");
     }
   }, [navRoute]);
 
@@ -203,7 +193,7 @@ export default function ParentDashboard({ user, navRoute }) {
         user={user}
         workspaceKey="parent_home"
         title="Set up the parent workspace"
-        description="Connect a child profile, review real progress, and leave guidance that stays visible to the student."
+        description="Connect a child profile, watch for early slippage, and leave guidance that stays visible to the student."
         items={onboardingItems}
       />
 
@@ -249,13 +239,23 @@ export default function ParentDashboard({ user, navRoute }) {
             <h3>
               {selectedChild
                 ? `${selectedChild.name} is ${stats.avgEffective}% through visible work.`
-                : "Link a child account to start monitoring progress."}
+                : "Link a child account to start spotting risk early."}
             </h3>
             <p>
               {nextDeadlineTask
                 ? `Next visible deadline: ${nextDeadlineTask.title} on ${formatDateTime(nextDeadlineTask.deadline)}.`
-                : "Once a child is linked, upcoming tasks and deadlines will surface here."}
+                : "Once a child is linked, deadlines, progress shifts, and support opportunities will surface here."}
             </p>
+            {!hasLinkedChildren && (
+              <div className="role-empty-actions">
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => scrollToCard("parent-link-child-card")}
+                >
+                  Link a Child
+                </button>
+              </div>
+            )}
           </div>
           <div className="command-center-actions">
             <div className="command-metric">
@@ -345,7 +345,15 @@ export default function ParentDashboard({ user, navRoute }) {
                 </span>
               </button>
             ))}
-            {!children.length && <div className="empty-col">No children linked yet.</div>}
+            {!children.length && (
+              <div className="role-empty-state role-empty-state-compact">
+                <strong>No child account is linked yet.</strong>
+                <p>
+                  Ask the student for their email and secure link code from the student
+                  workspace, then connect the account here.
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -362,7 +370,13 @@ export default function ParentDashboard({ user, navRoute }) {
             </div>
           )}
           {!selectedChild ? (
-            <div className="empty-col">Select a linked child to view details.</div>
+            <div className="role-empty-state role-empty-state-compact">
+              <strong>Select a linked child to see progress in context.</strong>
+              <p>
+                Once a child is selected, this panel will show tasks, deadlines, effective
+                progress, and parent review history in one place.
+              </p>
+            </div>
           ) : (
             <>
               <div className="stats-bar stats-bar-student">
@@ -398,7 +412,12 @@ export default function ParentDashboard({ user, navRoute }) {
                     </div>
                   </div>
                 ))}
-                {!tasks.length && <div className="empty-col">No tasks found for this child.</div>}
+                {!tasks.length && (
+                  <div className="empty-col">
+                    No visible tasks yet. Once the student or school adds real work, it will
+                    appear here with deadline and status context.
+                  </div>
+                )}
               </div>
 
               <div className="panel-subtitle" style={{ marginTop: "1rem" }}>
@@ -456,7 +475,12 @@ export default function ParentDashboard({ user, navRoute }) {
                     <div className="calendar-meta">Updated: {formatDateTime(review.updatedAt)}</div>
                   </div>
                 ))}
-                {!reviews.length && <div className="empty-col">No parent reviews yet.</div>}
+                {!reviews.length && (
+                  <div className="empty-col">
+                    No parent reviews yet. Use the form above to leave the first support note
+                    for this child.
+                  </div>
+                )}
               </div>
             </>
           )}

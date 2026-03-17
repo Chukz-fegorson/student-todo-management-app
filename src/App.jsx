@@ -11,20 +11,41 @@ import NotificationCenter from "./components/NotificationCenter";
 import CommandPalette from "./components/CommandPalette";
 import { NAVIGATION_EVENT, createNavigationIntent } from "./lib/navigation";
 
+const SHELL_SUBTITLES = {
+  student: "Know what needs attention next and keep momentum visible.",
+  parent: "See warning signs early and step in before a child slips.",
+  school: "Improve outcomes and fee collection with less operational chaos.",
+  state: "Spot school and LGA risk before weak performance spreads.",
+  federal: "See intervention needs across states before failure compounds.",
+};
+
 const SHELL_SUMMARIES = {
-  student: "Manage tasks, courses, fees, collaboration, and marketplace activity in one workflow.",
-  parent: "Follow your child's progress, link accounts, and contribute support notes from one place.",
-  school: "Coordinate students, courses, assignments, fees, and operations across your approved scope.",
-  state: "Monitor school performance, engagement, and academic activity across your state's scope.",
-  federal: "Coordinate national education activity, governance insights, and multi-state visibility.",
+  student:
+    "Keep the next task, course checkpoint, fee item, and collaboration signal in one workflow so follow-through is easier.",
+  parent:
+    "Follow linked child progress, get early context around slippage, and leave support notes without losing the academic picture.",
+  school:
+    "Keep teaching operations, assignments, communication, and revenue collection connected so teams can move faster with less confusion.",
+  state:
+    "Track school performance, engagement, and emerging pressure points across your state without losing the local context needed for action.",
+  federal:
+    "Compare state-level signals, surface weak spots early, and keep intervention planning connected to what is happening on the ground.",
 };
 
 const SHELL_HEADLINES = {
-  student: "Stay ahead of learning, deadlines, and follow-through.",
-  parent: "See progress early and act before students fall behind.",
-  school: "Run academic operations with a single control surface.",
-  state: "Track system health across schools without losing local context.",
-  federal: "See the broad picture while keeping execution connected.",
+  student: "See what to do next and stay on track.",
+  parent: "Catch slippage early and act while it is still fixable.",
+  school: "Run academics and revenue from one cleaner control surface.",
+  state: "Find intervention needs before school-level problems spread.",
+  federal: "See where national intervention is needed before failure scales.",
+};
+
+const SHELL_FOCUS_AREAS = {
+  student: ["Next actions", "Deadline risk", "Progress signals"],
+  parent: ["Early warnings", "Child progress", "Support actions"],
+  school: ["Student outcomes", "Revenue flow", "Operational clarity"],
+  state: ["School risk", "LGA hotspots", "Intervention queue"],
+  federal: ["National signals", "State comparison", "Intervention priorities"],
 };
 
 // This is the "traffic controller" of the frontend.
@@ -58,11 +79,14 @@ export default function App() {
   });
 
   function ensureUiInteractive() {
-    // Defensive unlock: keep app clickable even if a stale overlay/body state leaks in.
+    // Defensive unlock: keep app clickable if a stale modal/body state leaks in.
     const root = document.getElementById("root");
     const html = document.documentElement;
     const body = document.body;
     const overlays = Array.from(document.querySelectorAll(".modal-overlay"));
+    const clickGuarded = Array.from(
+      document.querySelectorAll("[data-click-guard-disabled='true']")
+    );
 
     [body, html, root].forEach((node) => {
       if (!node) return;
@@ -90,38 +114,11 @@ export default function App() {
       body.style.overflow = "";
     }
 
-    // Fallback: disable unknown full-screen blockers that are not part of app UI.
-    if (document.querySelector(".modal-overlay")) return;
-    const probePoints = [
-      [8, 8],
-      [Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)],
-      [Math.max(8, window.innerWidth - 8), Math.max(8, window.innerHeight - 8)],
-    ];
-    for (const [x, y] of probePoints) {
-      const topEl = document.elementFromPoint(x, y);
-      if (!topEl) continue;
-      if (
-        topEl === document.documentElement ||
-        topEl === document.body ||
-        topEl.id === "root" ||
-        topEl.closest(
-          ".app-shell, .topnav, .main, .auth-page, .auth-card, .profile-prompt, .notif-popover, .modal, .modal-overlay"
-        )
-      ) {
-        continue;
-      }
-      const style = window.getComputedStyle(topEl);
-      const rect = topEl.getBoundingClientRect();
-      const coversLargeArea =
-        rect.width >= window.innerWidth * 0.7 && rect.height >= window.innerHeight * 0.7;
-      if (
-        style.pointerEvents !== "none" &&
-        coversLargeArea
-      ) {
-        topEl.style.pointerEvents = "none";
-        topEl.setAttribute("data-click-guard-disabled", "true");
-      }
-    }
+    // Restore any elements that were previously disabled by older click-guard logic.
+    clickGuarded.forEach((node) => {
+      node.style.pointerEvents = "";
+      node.removeAttribute("data-click-guard-disabled");
+    });
   }
 
   // We use this small checker to know if student biodata is complete.
@@ -188,6 +185,9 @@ export default function App() {
     // Show biodata reminder only when needed.
     if (!user) {
       setShowProfilePrompt(false);
+      setShowAccountModal(false);
+      setAccountError("");
+      setNavRoute(null);
       return;
     }
     setShowProfilePrompt(isStudentProfileIncomplete(user));
@@ -216,6 +216,7 @@ export default function App() {
     clearAllAuth();
     setShowAccountModal(false);
     setAccountError("");
+    setNavRoute(null);
     setUser(null);
   }
 
@@ -257,8 +258,10 @@ export default function App() {
   const isStudent = user.role === "student";
   const isParent = user.role === "parent";
   const roleLabel = ROLE_LABELS[user.role] || "User";
+  const shellSubtitle = SHELL_SUBTITLES[user.role] || "StudyFlow workspace";
   const shellSummary = SHELL_SUMMARIES[user.role] || "StudyFlow workspace";
   const shellHeadline = SHELL_HEADLINES[user.role] || "Operate StudyFlow from one place.";
+  const shellFocus = SHELL_FOCUS_AREAS[user.role] || [];
   const scopeLabel =
     user.schoolName ||
     user.lgaName ||
@@ -279,7 +282,7 @@ export default function App() {
             <div className="nav-logo">StudyFlow</div>
             <span className="nav-logo-badge">MVP</span>
           </div>
-          <div className="nav-subtitle">{shellSummary}</div>
+          <div className="nav-subtitle">{shellSubtitle}</div>
         </div>
 
         <div className="nav-user">
@@ -334,6 +337,15 @@ export default function App() {
             <div className="shell-kicker">{roleLabel} Workspace</div>
             <h1>{shellHeadline}</h1>
             <p>{shellSummary}</p>
+            {shellFocus.length ? (
+              <div className="shell-focus-list" aria-label={`${roleLabel} priorities`}>
+                {shellFocus.map((entry) => (
+                  <span key={entry} className="shell-focus-chip">
+                    {entry}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="shell-banner-meta">
             <div className="shell-meta-card">

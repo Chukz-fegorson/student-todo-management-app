@@ -1,4 +1,4 @@
-import { DEFAULT_REMINDER_OFFSETS } from "./constants";
+import { DEFAULT_REMINDER_OFFSETS } from "./constants.js";
 
 export const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 export const now = () => Date.now();

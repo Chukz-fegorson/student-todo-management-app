@@ -16,6 +16,77 @@ const roleOptions = [
   { id: "federal", label: ROLE_LABELS.federal },
 ];
 
+const AUTH_MODE_META = {
+  login: {
+    eyebrow: "Resume your workspace",
+    description:
+      "Return to the same role-aware workspace with the right priorities, alerts, and next actions already in context.",
+    spotlight: [
+      "The next task, risk, or payment item stays visible",
+      "Role permissions and context come back exactly where you left them",
+      "Alerts, receipts, reviews, and collaboration stay connected",
+    ],
+  },
+  register: {
+    eyebrow: "Choose the right role path",
+    description:
+      "Start with the role that matches your job in the education system so StudyFlow can optimize the product around outcomes, not menus.",
+    spotlight: [
+      "Students see what to do next and how they are tracking",
+      "Parents get early visibility and a clearer support path",
+      "Schools and ministries get intervention and operations visibility",
+    ],
+  },
+  forgot: {
+    eyebrow: "Recover access safely",
+    description:
+      "Generate a reset token, set a new password, and return without losing the role-specific context that drives your workspace.",
+    spotlight: [
+      "Recover the account tied to your workflow",
+      "Keep the same scope, permissions, and linked context",
+      "Return without rebuilding your setup or visibility",
+    ],
+  },
+};
+
+const ROLE_GUIDES = {
+  student: {
+    title: "Student command center",
+    summary:
+      "Start with a workspace that makes the next task, deadline risk, progress signal, and fee item obvious at a glance.",
+    valuePoints: ["Next actions", "Deadline risk", "Progress clarity"],
+    requirements: ["Select your school", "Use your real student email", "Add grade or class if available"],
+  },
+  parent: {
+    title: "Parent oversight workspace",
+    summary:
+      "Get early visibility when your child is slipping and a direct way to leave support that stays close to the student workflow.",
+    valuePoints: ["Early warnings", "Child progress", "Support actions"],
+    requirements: ["Choose relationship type", "Enter your state and LGA", "Child link can be added now or later"],
+  },
+  school: {
+    title: "School operations surface",
+    summary:
+      "Improve outcomes and collect revenue with less chaos by keeping assignments, fees, courses, and communication in one operational surface.",
+    valuePoints: ["Outcomes", "Revenue flow", "Operational clarity"],
+    requirements: ["Provide school name", "Choose state and LGA", "Enter the school signup key"],
+  },
+  state: {
+    title: "State governance view",
+    summary:
+      "Spot weak schools, LGA pressure points, and intervention needs across your state before performance deterioration spreads.",
+    valuePoints: ["Risk visibility", "LGA hotspots", "Intervention queue"],
+    requirements: ["Choose your state", "Use the ministry signup key", "Continue into review and scorecards"],
+  },
+  federal: {
+    title: "Federal coordination workspace",
+    summary:
+      "See where intervention is needed across states before failure compounds, while keeping the national picture tied to local execution.",
+    valuePoints: ["National signals", "State comparison", "Intervention priorities"],
+    requirements: ["Use the federal signup key", "Land in national dashboards", "Coordinate with school-level signal intact"],
+  },
+};
+
 // AuthPage is the front door:
 // sign in, register, and password reset live in one place.
 export default function AuthPage({ onLogin }) {
@@ -49,6 +120,8 @@ export default function AuthPage({ onLogin }) {
   });
 
   const email = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
+  const activeMode = AUTH_MODE_META[tab] || AUTH_MODE_META.login;
+  const activeRoleGuide = ROLE_GUIDES[role] || ROLE_GUIDES.student;
   // Build state->LGA options from known schools so dropdowns stay contextual.
   const stateLgaIndex = useMemo(() => buildStateLgaIndex(schools), [schools]);
   const lgaOptions = useMemo(
@@ -87,6 +160,33 @@ export default function AuthPage({ onLogin }) {
     setTab("forgot");
     setField("resetToken", resetToken);
   }, []);
+
+  useEffect(() => {
+    const root = document.getElementById("root");
+    const html = document.documentElement;
+    const body = document.body;
+
+    [body, html, root].forEach((node) => {
+      if (!node) return;
+      node.style.pointerEvents = "auto";
+      node.removeAttribute("inert");
+    });
+
+    if (body.style.overflow === "hidden") {
+      body.style.overflow = "";
+    }
+
+    document
+      .querySelectorAll(".modal-overlay")
+      .forEach((overlay) => overlay.remove());
+
+    document
+      .querySelectorAll("[data-click-guard-disabled='true']")
+      .forEach((node) => {
+        node.style.pointerEvents = "";
+        node.removeAttribute("data-click-guard-disabled");
+      });
+  }, [tab]);
 
   async function login() {
     // Authenticate and store token+session on success.
@@ -265,8 +365,16 @@ export default function AuthPage({ onLogin }) {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">StudyFlow</div>
-        <div className="auth-tagline">
-          Role-based student task, submission, grading, and progress tracking
+        <div className="auth-kicker">{activeMode.eyebrow}</div>
+        <div className="auth-tagline">{activeMode.description}</div>
+
+        <div className="auth-spotlight-grid">
+          {activeMode.spotlight.map((entry) => (
+            <article key={entry} className="auth-spotlight-item">
+              <span className="auth-spotlight-dot" />
+              <p>{entry}</p>
+            </article>
+          ))}
         </div>
 
         <div className="auth-tabs">
@@ -320,6 +428,31 @@ export default function AuthPage({ onLogin }) {
                     {opt.label}
                   </button>
                 ))}
+              </div>
+              <div className="auth-role-guide">
+                <div className="auth-role-guide-head">
+                  <div>
+                    <div className="auth-role-guide-kicker">{ROLE_LABELS[role]} path</div>
+                    <strong>{activeRoleGuide.title}</strong>
+                  </div>
+                  <span className="auth-role-guide-badge">Guided setup</span>
+                </div>
+                <p>{activeRoleGuide.summary}</p>
+                <div className="auth-role-guide-pills">
+                  {activeRoleGuide.valuePoints.map((entry) => (
+                    <span key={entry} className="auth-role-guide-pill">
+                      {entry}
+                    </span>
+                  ))}
+                </div>
+                <div className="auth-role-guide-list">
+                  {activeRoleGuide.requirements.map((entry) => (
+                    <div key={entry} className="auth-role-guide-item">
+                      <span className="auth-role-guide-mark">+</span>
+                      <span>{entry}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -718,7 +851,11 @@ export default function AuthPage({ onLogin }) {
               disabled={busy}
               onClick={tab === "login" ? login : register}
             >
-              {busy ? "Please wait..." : tab === "login" ? "Sign In" : "Create Account"}
+              {busy
+                ? "Please wait..."
+                : tab === "login"
+                  ? "Sign In"
+                  : `Create ${ROLE_LABELS[role]} Account`}
             </button>
           </>
         )}

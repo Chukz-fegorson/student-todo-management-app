@@ -45,4 +45,13 @@ export default defineConfig([
       ],
     },
   },
+  {
+    files: ["tests/**/*.js"],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: globals.node,
+    },
+  },
 ]);

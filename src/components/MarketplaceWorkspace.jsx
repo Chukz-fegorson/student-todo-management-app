@@ -65,6 +65,19 @@ function marketChipMeta(product) {
   return { label: "Student Market", className: "market-card-chip-student" };
 }
 
+function paymentModeLabel(mode) {
+  switch (String(mode || "").toLowerCase()) {
+    case "card":
+      return "Card / Checkout";
+    case "p2p":
+      return "P2P Transfer";
+    case "transfer":
+      return "Bank Transfer";
+    default:
+      return "Cash";
+  }
+}
+
 export default function MarketplaceWorkspace({ user, navRoute }) {
   // Marketplace state buckets: catalog data, ui states, and form drafts.
   const [categories, setCategories] = useState([]);
@@ -99,7 +112,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [detailMediaIndex, setDetailMediaIndex] = useState(0);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
-  const [purchasePaymentMode, setPurchasePaymentMode] = useState("cash");
+  const [purchasePaymentMode, setPurchasePaymentMode] = useState("card");
   const [purchasePaymentReference, setPurchasePaymentReference] = useState("");
   const [offerDraft, setOfferDraft] = useState({ amountNaira: "", note: "" });
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, reviewText: "" });
@@ -280,7 +293,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
     setSelectedProductId(product.id);
     setDetailMediaIndex(0);
     setPurchaseQuantity(1);
-    setPurchasePaymentMode("cash");
+    setPurchasePaymentMode("card");
     setPurchasePaymentReference("");
     setOfferDraft({ amountNaira: "", note: "" });
   }
@@ -439,7 +452,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
   }
 
   async function placeOrder(productId, quantity = 1, paymentMode = "cash") {
-    // Create purchase order (payment confirmation happens later in order flow).
+    // Create purchase order; card checkout clears payment immediately while offline modes keep seller confirmation.
     try {
       setBusy(true);
       setError("");
@@ -453,7 +466,9 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
             : null,
       });
       setNotice(
-        paymentMode === "transfer"
+        paymentMode === "card"
+          ? "Order created. StudyFlow checkout marked payment as cleared. Seller will release the claim code after handoff."
+          : paymentMode === "transfer"
           ? "Order created. Complete transfer to seller account and wait for seller confirmation."
           : paymentMode === "p2p"
           ? "Order created. Complete P2P payment and wait for seller confirmation."
@@ -462,6 +477,20 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
       await loadMarketplace();
     } catch (err) {
       setError(err.message || "Failed to place order.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function releaseClaimCode(orderId) {
+    try {
+      setBusy(true);
+      setError("");
+      await apiPost(`/market/orders/${orderId}/release-claim-code`, {});
+      setNotice("Claim code released to buyer inbox.");
+      await loadMarketplace();
+    } catch (err) {
+      setError(err.message || "Failed to release claim code.");
     } finally {
       setBusy(false);
     }
@@ -1128,9 +1157,9 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                   <button
                     className="btn btn-primary btn-sm"
                     disabled={busy}
-                    onClick={() => placeOrder(product.id, 1, "cash")}
+                    onClick={() => placeOrder(product.id, 1, "card")}
                   >
-                    Buy
+                    Checkout
                   </button>
                 )}
               </div>
@@ -1164,21 +1193,23 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                   <div className="calendar-title">{order.productTitle || "Product"}</div>
                   <div className="calendar-meta">
                     Buyer: {order.buyerName || "Buyer"} | Seller: {order.sellerName || "Seller"} |
-                    Status: {order.status} | Total: N
+                    Status: {order.statusLabel || order.status} | Total: N
                     {Number(order.totalAmountNaira || 0).toLocaleString()} | Created:{" "}
                     {formatDateTime(order.createdAt)}
                   </div>
                   <div className="calendar-meta">
-                    Mode: {order.paymentMode || "cash"} | Platform Fee: N
+                    Mode: {paymentModeLabel(order.paymentMode)} | Platform Fee: N
                     {Number(order.platformFeeNaira || 0).toLocaleString()} | Seller Net: N
                     {Number(order.sellerNetNaira || 0).toLocaleString()}
                     {order.buyerPaymentReference
                       ? ` | Buyer Ref: ${order.buyerPaymentReference}`
                       : ""}
                   </div>
-                  {order.cashConfirmedAt && (
+                  {order.paymentConfirmedAt && (
                     <div className="calendar-meta">
-                      Seller confirmed payment: {formatDateTime(order.cashConfirmedAt)}
+                      {order.paymentMode === "card"
+                        ? `Checkout cleared: ${formatDateTime(order.paymentConfirmedAt)}`
+                        : `Seller confirmed payment: ${formatDateTime(order.paymentConfirmedAt)}`}
                     </div>
                   )}
                   {isBuyer &&
@@ -1198,9 +1229,30 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                   {isSeller && order.status === "CashConfirmed" && order.claimCode && (
                     <div className="review-summary-box" style={{ marginTop: "0.4rem" }}>
                       Claim Code: <strong>{order.claimCode}</strong>
+                      {order.paymentMode === "card" && !order.claimCodeReleasedAt
+                        ? " | Waiting for seller release"
+                        : ""}
                     </div>
                   )}
-                  {isBuyer && order.status === "CashConfirmed" && (
+                  {isSeller &&
+                    order.paymentMode === "card" &&
+                    order.status === "CashConfirmed" &&
+                    order.claimCodeReleasedAt && (
+                      <div className="calendar-meta">
+                        Claim code released: {formatDateTime(order.claimCodeReleasedAt)}
+                      </div>
+                    )}
+                  {isBuyer &&
+                    order.paymentMode === "card" &&
+                    order.status === "CashConfirmed" &&
+                    !order.claimCodeReleasedAt && (
+                      <div className="calendar-meta">
+                        Payment is cleared. Waiting for seller to release your claim code after handoff.
+                      </div>
+                    )}
+                  {isBuyer &&
+                    order.status === "CashConfirmed" &&
+                    (order.paymentMode !== "card" || order.claimCodeReleasedAt) && (
                     <div className="calendar-meta">
                       Claim code was sent to your inbox. Enter it below to complete purchase.
                     </div>
@@ -1216,7 +1268,21 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                       Confirm Payment
                     </button>
                   )}
-                  {isBuyer && order.status === "CashConfirmed" && (
+                  {isSeller &&
+                    order.paymentMode === "card" &&
+                    order.status === "CashConfirmed" &&
+                    !order.claimCodeReleasedAt && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={busy}
+                        onClick={() => releaseClaimCode(order.id)}
+                      >
+                        Release Claim Code
+                      </button>
+                    )}
+                  {isBuyer &&
+                    order.status === "CashConfirmed" &&
+                    (order.paymentMode !== "card" || order.claimCodeReleasedAt) && (
                     <>
                       <input
                         style={{ width: "120px" }}
@@ -1272,9 +1338,11 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                   </div>
                   <div className="calendar-meta">
                     Created: {formatDateTime(order.createdAt)}
-                    {order.paymentMode ? ` | Mode: ${order.paymentMode}` : ""}
-                    {order.cashConfirmedAt
-                      ? ` | Payment Confirmed: ${formatDateTime(order.cashConfirmedAt)}`
+                    {order.paymentMode
+                      ? ` | Mode: ${paymentModeLabel(order.paymentMode)}`
+                      : ""}
+                    {order.paymentConfirmedAt
+                      ? ` | Payment Confirmed: ${formatDateTime(order.paymentConfirmedAt)}`
                       : ""}
                     {order.claimedAt ? ` | Completed: ${formatDateTime(order.claimedAt)}` : ""}
                   </div>
@@ -1455,6 +1523,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                         value={purchasePaymentMode}
                         onChange={(event) => setPurchasePaymentMode(event.target.value)}
                       >
+                        <option value="card">Card / Checkout</option>
                         <option value="cash">Cash</option>
                         <option value="p2p">P2P Transfer</option>
                         <option value="transfer">Bank Transfer</option>
@@ -1484,6 +1553,12 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                             setPurchasePaymentReference(event.target.value)
                           }
                         />
+                      </div>
+                    )}
+                    {purchasePaymentMode === "card" && (
+                      <div className="review-summary-box" style={{ marginTop: "0.5rem" }}>
+                        StudyFlow Checkout clears payment instantly. The seller keeps the existing
+                        handoff flow by releasing your claim code after the item is ready.
                       </div>
                     )}
                   </div>

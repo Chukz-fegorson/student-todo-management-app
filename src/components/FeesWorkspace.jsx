@@ -2,9 +2,37 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
 
+function formatNaira(value) {
+  return `N${Number(value || 0).toLocaleString()}`;
+}
+
 function amountNairaFromInvoice(invoice) {
   if (Number.isFinite(Number(invoice.amountNaira))) return Number(invoice.amountNaira);
   return Number(invoice.amountKobo || 0) / 100;
+}
+
+function amountNairaFromPlan(plan) {
+  if (Number.isFinite(Number(plan.amountNaira))) return Number(plan.amountNaira);
+  return Number(plan.amountKobo || 0) / 100;
+}
+
+function getInvoiceItems(invoice) {
+  if (Array.isArray(invoice?.items) && invoice.items.length) return invoice.items;
+  return [
+    {
+      id: `${invoice?.id || "invoice"}-fallback`,
+      title: invoice?.title || "School Fees",
+      description: invoice?.description || "",
+      amountNaira: amountNairaFromInvoice(invoice || {}),
+    },
+  ];
+}
+
+function getInvoicePurposeLabel(invoice) {
+  const items = getInvoiceItems(invoice);
+  if (!items.length) return invoice?.title || "School fees";
+  if (items.length === 1) return items[0].title || invoice?.title || "School fees";
+  return `${items.length} fee items`;
 }
 
 function fileToDataUrl(file) {
@@ -16,32 +44,378 @@ function fileToDataUrl(file) {
   });
 }
 
-function downloadPaymentReceipt(payment) {
-  const lines = [
-    "StudyFlow Fee Receipt",
-    "---------------------",
-    `Invoice: ${payment.invoiceTitle || payment.paidForLabel || "School fees"}`,
-    `Student: ${payment.studentName || "Student"}`,
-    `School: ${payment.schoolName || "School"}`,
-    `Amount (NGN): ${Number(payment.amountNaira || 0).toLocaleString()}`,
-    `Status: ${payment.status || "N/A"}`,
-    `Payment Method: ${payment.paymentMethod || "transfer"}`,
-    `Transaction Ref: ${payment.transactionReference || "N/A"}`,
-    `School Receipt No: ${payment.schoolReceiptNo || "Pending"}`,
-    `Receipt Issued At: ${payment.schoolReceiptIssuedAt || "Pending"}`,
-  ];
-  const blob = new Blob([`${lines.join("\n")}\n`], { type: "text/plain;charset=utf-8" });
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeFileName(value, fallback = "studyflow-document") {
+  const cleaned = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
+function triggerDownload(blob, fileName) {
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `studyflow-fee-receipt-${String(payment.id || "payment").slice(0, 8)}.txt`;
+  anchor.download = fileName;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.URL.revokeObjectURL(url);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1200);
 }
 
-export default function FeesWorkspace({ user }) {
+function buildDocumentShell({ title, subtitle, badge, bodyHtml }) {
+  return `<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>${escapeHtml(title)}</title>
+      <style>
+        :root {
+          color-scheme: light;
+          --ink: #162033;
+          --muted: #5a667d;
+          --line: #dbe3f2;
+          --surface: #ffffff;
+          --surface2: #f4f7fc;
+          --accent: #2a6df4;
+          --accent-soft: rgba(42, 109, 244, 0.08);
+        }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          padding: 24px;
+          background: #eef3fb;
+          color: var(--ink);
+          font-family: "Segoe UI", Arial, sans-serif;
+        }
+        .sheet {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 28px;
+          border-radius: 24px;
+          background: var(--surface);
+          box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+        }
+        .eyebrow {
+          color: var(--accent);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          margin-bottom: 10px;
+        }
+        h1 {
+          margin: 0;
+          font-size: 28px;
+          line-height: 1.1;
+        }
+        .subtitle {
+          margin: 10px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+          line-height: 1.55;
+        }
+        .badge {
+          display: inline-flex;
+          margin-top: 16px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+        .section {
+          margin-top: 22px;
+          padding: 18px;
+          border-radius: 18px;
+          background: var(--surface2);
+          border: 1px solid var(--line);
+        }
+        .section h2 {
+          margin: 0 0 12px;
+          font-size: 15px;
+        }
+        .details {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .detail-row {
+          border: 1px solid var(--line);
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: var(--surface);
+        }
+        .detail-row span {
+          display: block;
+          margin-bottom: 6px;
+          color: var(--muted);
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .detail-row strong {
+          display: block;
+          font-size: 14px;
+          line-height: 1.45;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          background: var(--surface);
+          border: 1px solid var(--line);
+          border-radius: 14px;
+          overflow: hidden;
+        }
+        th, td {
+          padding: 12px 14px;
+          border-bottom: 1px solid var(--line);
+          text-align: left;
+          font-size: 14px;
+          vertical-align: top;
+        }
+        th {
+          color: var(--muted);
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          background: #edf3ff;
+        }
+        td:last-child, th:last-child {
+          text-align: right;
+          white-space: nowrap;
+        }
+        tr:last-child td {
+          border-bottom: none;
+        }
+        ul {
+          margin: 0;
+          padding-left: 18px;
+          color: var(--ink);
+        }
+        p {
+          margin: 0;
+          color: var(--ink);
+          font-size: 14px;
+          line-height: 1.6;
+        }
+        .footer {
+          margin-top: 18px;
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        @media print {
+          body {
+            padding: 0;
+            background: #ffffff;
+          }
+          .sheet {
+            box-shadow: none;
+            border-radius: 0;
+            max-width: none;
+            padding: 0;
+          }
+        }
+        @media (max-width: 720px) {
+          body { padding: 14px; }
+          .sheet { padding: 18px; }
+          .details { grid-template-columns: 1fr; }
+          th, td:last-child { text-align: left; }
+        }
+      </style>
+    </head>
+    <body>
+      <main class="sheet">
+        <div class="eyebrow">StudyFlow Fees</div>
+        <h1>${escapeHtml(title)}</h1>
+        ${subtitle ? `<p class="subtitle">${escapeHtml(subtitle)}</p>` : ""}
+        ${badge ? `<div class="badge">${escapeHtml(badge)}</div>` : ""}
+        ${bodyHtml}
+      </main>
+    </body>
+  </html>`;
+}
+
+function buildDetailRows(rows) {
+  return rows
+    .filter((row) => row && row.value !== undefined && row.value !== null && row.value !== "")
+    .map(
+      (row) => `
+        <div class="detail-row">
+          <span>${escapeHtml(row.label)}</span>
+          <strong>${escapeHtml(row.value)}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function downloadPaymentReceipt(payment) {
+  const evidenceList = Array.isArray(payment.receiptMedia)
+    ? payment.receiptMedia
+        .map(
+          (entry, index) =>
+            `<li>${escapeHtml(
+              entry?.name ||
+                `${String(entry?.kind || "receipt").toUpperCase()} evidence ${index + 1}`
+            )}</li>`
+        )
+        .join("")
+    : "";
+  const html = buildDocumentShell({
+    title: "Fee Payment Receipt",
+    subtitle: `${payment.invoiceTitle || payment.paidForLabel || "School fees"} - ${formatNaira(
+      payment.amountNaira || 0
+    )}`,
+    badge: payment.status || "Paid",
+    bodyHtml: `
+      <section class="section">
+        <h2>Receipt details</h2>
+        <div class="details">
+          ${buildDetailRows([
+            { label: "Invoice", value: payment.invoiceTitle || payment.paidForLabel || "School fees" },
+            { label: "Student", value: payment.studentName || "Student" },
+            { label: "School", value: payment.schoolName || "School" },
+            { label: "Amount", value: formatNaira(payment.amountNaira || 0) },
+            { label: "Payment method", value: payment.paymentMethod || "transfer" },
+            { label: "Transaction ref", value: payment.transactionReference || "N/A" },
+            { label: "School receipt no", value: payment.schoolReceiptNo || "Pending" },
+            {
+              label: "Receipt issued",
+              value: payment.schoolReceiptIssuedAt
+                ? formatDateTime(payment.schoolReceiptIssuedAt)
+                : "Pending",
+            },
+            {
+              label: "Submitted at",
+              value: payment.studentMarkedAt
+                ? formatDateTime(payment.studentMarkedAt)
+                : "N/A",
+            },
+          ])}
+        </div>
+      </section>
+      ${
+        payment.notes
+          ? `<section class="section"><h2>Student note</h2><p>${escapeHtml(payment.notes)}</p></section>`
+          : ""
+      }
+      ${
+        payment.schoolReceiptNote
+          ? `<section class="section"><h2>School receipt note</h2><p>${escapeHtml(
+              payment.schoolReceiptNote
+            )}</p></section>`
+          : ""
+      }
+      ${
+        evidenceList
+          ? `<section class="section"><h2>Uploaded evidence</h2><ul>${evidenceList}</ul></section>`
+          : ""
+      }
+      <div class="footer">
+        Generated by StudyFlow. Open this file in a browser and print to PDF if you need a shareable copy.
+      </div>
+    `,
+  });
+
+  triggerDownload(
+    new Blob([html], { type: "text/html;charset=utf-8" }),
+    `${sanitizeFileName(
+      payment.schoolReceiptNo || `studyflow-fee-receipt-${String(payment.id || "payment").slice(0, 8)}`,
+      "studyflow-fee-receipt"
+    )}.html`
+  );
+}
+
+function downloadInvoiceDocument(invoice) {
+  const items = getInvoiceItems(invoice);
+  const itemRows = items
+    .map(
+      (item) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(item.title || "Fee item")}</strong>
+            ${
+              item.description
+                ? `<div style="margin-top:4px;color:#5a667d;">${escapeHtml(item.description)}</div>`
+                : ""
+            }
+          </td>
+          <td>${escapeHtml(formatNaira(Number(item.amountNaira || 0)))}</td>
+        </tr>
+      `
+    )
+    .join("");
+  const html = buildDocumentShell({
+    title: "Fee Invoice",
+    subtitle: `${invoice.title || "School Fees Invoice"} - ${formatNaira(
+      amountNairaFromInvoice(invoice)
+    )}`,
+    badge: invoice.status || "Unpaid",
+    bodyHtml: `
+      <section class="section">
+        <h2>Invoice details</h2>
+        <div class="details">
+          ${buildDetailRows([
+            {
+              label: "Invoice no",
+              value:
+                invoice.invoiceNo ||
+                `SF-INV-${String(invoice.id || "").slice(0, 8).toUpperCase()}`,
+            },
+            { label: "Student", value: invoice.studentName || "Student" },
+            { label: "School", value: invoice.schoolName || "School" },
+            { label: "Due date", value: invoice.dueAt ? formatDateTime(invoice.dueAt) : "No deadline" },
+            {
+              label: "Generated",
+              value: invoice.createdAt ? formatDateTime(invoice.createdAt) : formatDateTime(new Date()),
+            },
+            { label: "Total", value: formatNaira(amountNairaFromInvoice(invoice)) },
+          ])}
+        </div>
+      </section>
+      <section class="section">
+        <h2>Fee items</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+      </section>
+      <div class="footer">
+        Generated by StudyFlow. Open this file in a browser and print to PDF if you need a shareable copy.
+      </div>
+    `,
+  });
+
+  triggerDownload(
+    new Blob([html], { type: "text/html;charset=utf-8" }),
+    `${sanitizeFileName(invoice.invoiceNo || invoice.id || "studyflow-invoice", "studyflow-invoice")}.html`
+  );
+}
+
+export default function FeesWorkspace({ user, navRoute }) {
   const [plans, setPlans] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -66,6 +440,7 @@ export default function FeesWorkspace({ user }) {
     dueAt: "",
     description: "",
   });
+  const [selectedPlanIds, setSelectedPlanIds] = useState([]);
   const [paymentDrafts, setPaymentDrafts] = useState({});
   const [schoolReceiptNotes, setSchoolReceiptNotes] = useState({});
 
@@ -105,12 +480,29 @@ export default function FeesWorkspace({ user }) {
     loadData();
   }, [user.id, loadData]);
 
+  useEffect(() => {
+    if (navRoute?.module !== "fees" || !navRoute?.entityId) return;
+    const matchedInvoice = invoices.find((invoice) => invoice.id === navRoute.entityId);
+    if (!matchedInvoice) return;
+    jumpToInvoice(matchedInvoice.id);
+    if (isStudent && matchedInvoice.status === "Unpaid") {
+      updatePaymentDraft(matchedInvoice.id, {
+        open: true,
+        paidForLabel: getInvoicePurposeLabel(matchedInvoice),
+      });
+    }
+  }, [navRoute, invoices, isStudent]);
+
   const pendingPayments = useMemo(
     () => payments.filter((entry) => entry.status === "PendingConfirmation"),
     [payments]
   );
   const unpaidInvoices = useMemo(
     () => invoices.filter((entry) => entry.status === "Unpaid"),
+    [invoices]
+  );
+  const activeInvoices = useMemo(
+    () => invoices.filter((entry) => ["Unpaid", "PendingConfirmation"].includes(entry.status)),
     [invoices]
   );
   const totalOutstandingNaira = useMemo(
@@ -128,13 +520,45 @@ export default function FeesWorkspace({ user }) {
       ),
     [recentPayments]
   );
+  const activeInvoiceByPlanId = useMemo(() => {
+    const map = new Map();
+    activeInvoices.forEach((invoice) => {
+      getInvoiceItems(invoice).forEach((item) => {
+        if (item.planId && !map.has(item.planId)) {
+          map.set(item.planId, invoice);
+        }
+      });
+    });
+    return map;
+  }, [activeInvoices]);
+  const paidInvoiceByPlanId = useMemo(() => {
+    const map = new Map();
+    invoices
+      .filter((invoice) => invoice.status === "Paid")
+      .forEach((invoice) => {
+        getInvoiceItems(invoice).forEach((item) => {
+          if (item.planId && !map.has(item.planId)) {
+            map.set(item.planId, invoice);
+          }
+        });
+      });
+    return map;
+  }, [invoices]);
+  const selectedPlans = useMemo(
+    () => plans.filter((plan) => selectedPlanIds.includes(plan.id)),
+    [plans, selectedPlanIds]
+  );
+  const selectedPlanTotalNaira = useMemo(
+    () => selectedPlans.reduce((sum, plan) => sum + amountNairaFromPlan(plan), 0),
+    [selectedPlans]
+  );
 
   function getPaymentDraft(invoice) {
     const existing = paymentDrafts[invoice.id];
     if (existing) return existing;
     return {
       open: false,
-      paidForLabel: invoice.title || "School fees",
+      paidForLabel: getInvoicePurposeLabel(invoice),
       paymentMethod: "transfer",
       transactionReference: "",
       receiptMedia: [],
@@ -169,6 +593,22 @@ export default function FeesWorkspace({ user }) {
       ...prev,
       [paymentId]: value,
     }));
+  }
+
+  function jumpToInvoice(invoiceId) {
+    if (!invoiceId) return;
+    const element = document.getElementById(`fee-invoice-${invoiceId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function togglePlanSelection(planId) {
+    setSelectedPlanIds((prev) =>
+      prev.includes(planId)
+        ? prev.filter((entry) => entry !== planId)
+        : [...prev, planId]
+    );
   }
 
   async function addReceiptFiles(invoiceId, event) {
@@ -295,6 +735,39 @@ export default function FeesWorkspace({ user }) {
     }
   }
 
+  async function createStudentInvoiceFromPlans() {
+    if (!selectedPlanIds.length) {
+      setError("Select at least one school fee plan.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setError("");
+      const createdInvoice = await apiPost("/fees/invoices/from-plans", {
+        planIds: selectedPlanIds,
+      });
+      setNotice(
+        selectedPlanIds.length === 1
+          ? "Invoice generated from the selected fee plan. Complete payment below."
+          : "Combined invoice generated from selected fee plans. Complete payment below."
+      );
+      setSelectedPlanIds([]);
+      updatePaymentDraft(createdInvoice.id, {
+        open: true,
+        paidForLabel: getInvoicePurposeLabel(createdInvoice),
+      });
+      await loadData();
+      window.setTimeout(() => {
+        jumpToInvoice(createdInvoice.id);
+      }, 120);
+    } catch (err) {
+      setError(err.message || "Failed to generate invoice from selected plans.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function markInvoicePaid(invoiceId) {
     const invoice = invoices.find((entry) => entry.id === invoiceId);
     const draft = getPaymentDraft(invoice || { id: invoiceId, title: "" });
@@ -404,6 +877,102 @@ export default function FeesWorkspace({ user }) {
         </div>
       )}
       {error && <div className="error-msg">{error}</div>}
+
+      {isStudent && (
+        <div className="panel panel-elevated" style={{ marginBottom: "1rem" }}>
+          <div className="panel-kicker">Available Plans</div>
+          <div className="panel-title">Select School Fee Items</div>
+          <div className="panel-copy">
+            Choose one or multiple school fee plans. StudyFlow will generate one invoice for the selected items, then you can continue directly to payment and receipt confirmation.
+          </div>
+
+          <div className="fees-plan-grid">
+            {plans.map((plan) => {
+              const activeInvoice = activeInvoiceByPlanId.get(plan.id) || null;
+              const paidInvoice = paidInvoiceByPlanId.get(plan.id) || null;
+              const existingInvoice = activeInvoice || paidInvoice || null;
+              const disabled = Boolean(existingInvoice);
+              return (
+                <div
+                  key={plan.id}
+                  className={`fees-plan-card ${selectedPlanIds.includes(plan.id) ? "selected" : ""} ${disabled ? "locked" : ""}`}
+                >
+                  <div className="fees-plan-card-head">
+                    <div>
+                      <div className="review-card-title">{plan.title}</div>
+                      <div className="review-card-meta">
+                        <span>{plan.schoolName || "School"}</span>
+                        {plan.termLabel ? <span>| {plan.termLabel}</span> : null}
+                        {plan.academicSession ? <span>| {plan.academicSession}</span> : null}
+                      </div>
+                    </div>
+                    <div style={{ fontWeight: 700 }}>{formatNaira(amountNairaFromPlan(plan))}</div>
+                  </div>
+                  {!!plan.description && (
+                    <div className="review-summary-box">{plan.description}</div>
+                  )}
+                  <div className="fees-plan-status-row">
+                    {activeInvoice ? (
+                      <span className="module-highlight-pill">
+                        Active invoice: {activeInvoice.status}
+                      </span>
+                    ) : paidInvoice ? (
+                      <span className="module-highlight-pill">Already invoiced and paid</span>
+                    ) : (
+                      <span className="module-highlight-pill">Available to invoice</span>
+                    )}
+                  </div>
+                  <div className="fees-plan-actions">
+                    <label className="student-pick-row" style={{ margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPlanIds.includes(plan.id)}
+                        disabled={disabled || busy}
+                        onChange={() => togglePlanSelection(plan.id)}
+                      />
+                      <span>Select for invoice</span>
+                    </label>
+                    {existingInvoice ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => jumpToInvoice(existingInvoice.id)}
+                      >
+                        Open Existing Invoice
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!!plans.length && (
+            <div className="fees-selection-bar">
+              <div>
+                <strong>{selectedPlans.length}</strong> item
+                {selectedPlans.length === 1 ? "" : "s"} selected
+                <div className="panel-hint">
+                  Invoice total: {formatNaira(selectedPlanTotalNaira)}
+                </div>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={busy || !selectedPlanIds.length}
+                onClick={createStudentInvoiceFromPlans}
+              >
+                Generate Invoice
+              </button>
+            </div>
+          )}
+
+          {!plans.length && (
+            <div className="empty-col">
+              No active fee plans have been published for your school yet.
+            </div>
+          )}
+        </div>
+      )}
 
       {canManageFees && (
         <div className="workspace-grid workspace-grid-fees-admin" style={{ marginBottom: "1rem" }}>
@@ -555,12 +1124,12 @@ export default function FeesWorkspace({ user }) {
         <div className="panel-title">Invoices ({invoices.length})</div>
         <div className="panel-copy">
           {isStudent
-            ? "Review outstanding invoices, submit payment evidence, and track confirmation status."
-            : "Monitor invoice status across students and keep payment progress visible."}
+            ? "Review generated invoices, download itemized copies, submit payment evidence, and track confirmation status."
+            : "Monitor generated invoices across students, download the same invoice the student sees, and keep payment progress visible."}
         </div>
         <div className="calendar-list">
           {invoices.map((invoice) => (
-            <div key={invoice.id} className="review-card">
+            <div key={invoice.id} id={`fee-invoice-${invoice.id}`} className="review-card">
               <div className="review-card-header">
                 <div>
                   <div className="review-card-title">{invoice.title}</div>
@@ -576,8 +1145,35 @@ export default function FeesWorkspace({ user }) {
                   N{amountNairaFromInvoice(invoice).toLocaleString()}
                 </div>
               </div>
+              {!!getInvoiceItems(invoice).length && (
+                <div className="fees-invoice-items">
+                  {getInvoiceItems(invoice).map((item) => (
+                    <div key={item.id} className="fees-invoice-item">
+                      <div>
+                        <strong>{item.title || "Fee item"}</strong>
+                        {item.description ? (
+                          <div className="panel-hint">{item.description}</div>
+                        ) : null}
+                      </div>
+                      <span>{formatNaira(item.amountNaira || 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="calendar-meta">
+                Invoice No: {invoice.invoiceNo || String(invoice.id || "").slice(0, 8).toUpperCase()}
+              </div>
               <div className="calendar-meta">
                 Due: {invoice.dueAt ? formatDateTime(invoice.dueAt) : "No deadline"}
+              </div>
+              <div style={{ marginTop: "0.45rem", display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => downloadInvoiceDocument(invoice)}
+                >
+                  Download Invoice
+                </button>
               </div>
               {isStudent && invoice.status === "Unpaid" && (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>
@@ -592,7 +1188,7 @@ export default function FeesWorkspace({ user }) {
                   ) : (
                     <>
                       <input
-                        placeholder="Paid for (e.g. Tuition, Bus fee, Hostel)"
+                        placeholder="Paid for (e.g. Tuition, Exam fee, Hostel)"
                         value={getPaymentDraft(invoice).paidForLabel}
                         onChange={(event) =>
                           updatePaymentDraft(invoice.id, {

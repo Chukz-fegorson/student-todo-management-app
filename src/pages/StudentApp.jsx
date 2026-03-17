@@ -53,6 +53,37 @@ const STUDENT_MODULE_META = {
   },
 };
 
+const STUDENT_MODULE_TABS = [
+  { id: "tasks", label: "My Tasks" },
+  { id: "courses", label: "Courses" },
+  { id: "fees", label: "My Fees" },
+  { id: "collab", label: "Collab Hub" },
+  { id: "market", label: "Marketplace" },
+];
+
+const KANBAN_COLUMN_META = {
+  Todo: {
+    label: "To-do",
+    subtitle: "Planned work that still needs a start.",
+    dotClassName: "kanban-dot-todo",
+  },
+  "In Progress": {
+    label: "In-progress",
+    subtitle: "Work already in motion.",
+    dotClassName: "kanban-dot-progress",
+  },
+  Submitted: {
+    label: "Submitted",
+    subtitle: "Waiting for review or feedback.",
+    dotClassName: "kanban-dot-submitted",
+  },
+  Graded: {
+    label: "Graded",
+    subtitle: "Reviewed work you can learn from.",
+    dotClassName: "kanban-dot-graded",
+  },
+};
+
 function isUnder18(dateValue) {
   if (!dateValue) return false;
   const dob = new Date(dateValue);
@@ -89,6 +120,7 @@ export default function StudentApp({
   // Which module tab is currently open.
   const [view, setView] = useState("tasks");
   const [highlightTaskId, setHighlightTaskId] = useState("");
+  const [openTaskUtility, setOpenTaskUtility] = useState("");
 
   async function loadTodos() {
     // Ask backend for this student's current tasks.
@@ -256,6 +288,8 @@ export default function StudentApp({
     Boolean(String(user?.bio || "").trim()) &&
     Boolean(String(user?.phone || "").trim()) &&
     Boolean(String(user?.dateOfBirth || "").trim());
+  const notificationsEnabled =
+    typeof window !== "undefined" && window.Notification?.permission === "granted";
   const courseProgress = Number(courseOverview?.overallCourseProgress || 0);
   const cgpa = Number(courseOverview?.cgpa || 0);
   const selectedCoursesCount = Number(courseOverview?.selectedCoursesCount || 0);
@@ -313,6 +347,17 @@ export default function StudentApp({
   const completionRate = total
     ? Math.round(((graded + submitted) / total) * 100)
     : 0;
+  const needsTaskSetup = total === 0;
+  const taskCommandHeadline = needsTaskSetup
+    ? "Start with one real task so StudyFlow can tell you what matters next."
+    : focusTask
+      ? focusTask.title
+      : "You are clear for now. Keep the next commitment visible.";
+  const taskCommandCopy = needsTaskSetup
+    ? "Create a real assignment, revision target, or project, then add courses and reminders so the dashboard can guide you before work slips."
+    : focusTask
+      ? `Next deadline: ${formatDateTime(focusTask.deadline)}. Keep this item moving before it becomes urgent.`
+      : "Tasks, course assessments, and reminders will surface here when they need attention.";
   const moduleHighlights = {
     tasks: [
       `${activeTasksCount} active task${activeTasksCount === 1 ? "" : "s"}`,
@@ -347,6 +392,29 @@ export default function StudentApp({
     fees: notificationSummary?.byModule?.fees || 0,
     market: notificationSummary?.byModule?.market || 0,
   };
+  const taskUtilityItems = [
+    {
+      id: "focus",
+      label: "Focus Queue",
+      count: focusQueue.length,
+      title: "Next Moves",
+      kicker: "Focus queue",
+    },
+    {
+      id: "deadlines",
+      label: "Deadlines",
+      count: upcomingDeadlines.length,
+      title: "Upcoming Deadlines",
+      kicker: "Deadlines",
+    },
+    {
+      id: "support",
+      label: "Parent Review",
+      count: parentReviews.length,
+      title: "Parent Review",
+      kicker: "Support",
+    },
+  ];
   const onboardingItems = [
     {
       id: "profile",
@@ -380,7 +448,7 @@ export default function StudentApp({
       id: "reminders",
       title: "Enable reminders",
       description: "Turn on browser reminders so upcoming deadlines can surface before they become urgent.",
-      done: typeof window !== "undefined" && window.Notification?.permission === "granted",
+      done: notificationsEnabled,
       actionLabel: "Enable",
       onAction: enableNotifications,
     },
@@ -416,62 +484,35 @@ export default function StudentApp({
     return () => window.clearTimeout(timer);
   }, [highlightTaskId]);
 
+  useEffect(() => {
+    if (view !== "tasks") {
+      setOpenTaskUtility("");
+    }
+  }, [view]);
+
   return (
     <div className="main">
       <WorkspaceOnboarding
         user={user}
         workspaceKey="student_home"
         title="Set up your student workspace"
-        description="Finish these first actions to make tasks, courses, reminders, and support tools useful immediately."
+        description="Finish these first actions so StudyFlow can show what to do next, track progress clearly, and warn you before deadlines slip."
         items={onboardingItems}
       />
 
       <div className="view-tabs module-tabs">
-        <button
-          className={`view-tab module-tab ${view === "tasks" ? "active" : ""}`}
-          onClick={() => setView("tasks")}
-        >
-          My Tasks
-          {moduleTabCounts.tasks > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.tasks}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "courses" ? "active" : ""}`}
-          onClick={() => setView("courses")}
-        >
-          Courses
-          {moduleTabCounts.courses > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.courses}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
-          onClick={() => setView("collab")}
-        >
-          Collab Hub
-          {moduleTabCounts.collab > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.collab}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "fees" ? "active" : ""}`}
-          onClick={() => setView("fees")}
-        >
-          My Fees
-          {moduleTabCounts.fees > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.fees}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "market" ? "active" : ""}`}
-          onClick={() => setView("market")}
-        >
-          Marketplace
-          {moduleTabCounts.market > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.market}</span>
-          )}
-        </button>
+        {STUDENT_MODULE_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`view-tab module-tab ${view === tab.id ? "active" : ""}`}
+            onClick={() => setView(tab.id)}
+          >
+            {tab.label}
+            {moduleTabCounts[tab.id] > 0 && (
+              <span className="module-tab-badge">{moduleTabCounts[tab.id]}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       <section className="module-hero">
@@ -566,14 +607,8 @@ export default function StudentApp({
             <div className="command-center-head">
               <div className="command-center-copy">
                 <div className="panel-kicker">Today&apos;s focus</div>
-                <h3>
-                  {focusTask ? focusTask.title : "You are clear for now. Create work before the next deadline sneaks up."}
-                </h3>
-                <p>
-                  {focusTask
-                    ? `Next deadline: ${formatDateTime(focusTask.deadline)}. Keep this item moving before it becomes urgent.`
-                    : "Tasks, course assessments, and reminders will surface here when they need attention."}
-                </p>
+                <h3>{taskCommandHeadline}</h3>
+                <p>{taskCommandCopy}</p>
               </div>
               <div className="command-center-actions">
                 <div className="command-metric">
@@ -655,9 +690,9 @@ export default function StudentApp({
           <p>Tasks, deadlines, and course reminders are being prepared.</p>
         </div>
       ) : (
-        <div className="workspace-grid workspace-grid-student">
-          <div className="workspace-main">
-            <section className="panel panel-elevated">
+        <div className="student-task-layout">
+          <div>
+            <section className="panel panel-elevated student-kanban-panel">
               <div className="panel-headline">
                 <div>
                   <div className="panel-kicker">Board view</div>
@@ -667,139 +702,244 @@ export default function StudentApp({
                   </div>
                 </div>
               </div>
-              <div className="kanban">
-                {Object.entries(columns).map(([columnName, items]) => (
-                  <div
-                    key={columnName}
-                    className={`kanban-col ${
-                      columnName === "Submitted" ? "col-review" : ""
-                    }`}
-                  >
-                    <div className="kanban-head">
-                      <div className="kanban-title">{columnName}</div>
-                      <div className="kanban-count">{items.length}</div>
-                    </div>
-
-                    <div className="kanban-cards">
-                      {items.map((todo) => (
-                        <TodoCard
-                          key={todo.id}
-                          todo={todo}
-                          highlighted={todo.id === highlightTaskId}
-                          onEdit={(entry) => {
-                            setEditing(entry);
-                            setShowModal(true);
-                          }}
-                          onDelete={(entry) => setDeleting(entry)}
-                        />
-                      ))}
-                    </div>
-
-                    {!items.length && (
-                      <div className="empty-col">
-                        {columnName === "Todo"
-                          ? "No tasks waiting to be started."
-                          : columnName === "In Progress"
-                            ? "Nothing is currently in motion."
-                            : columnName === "Submitted"
-                              ? "No work is waiting for review."
-                              : "Nothing has been graded yet."}
-                      </div>
-                    )}
+              {needsTaskSetup ? (
+                <div className="role-empty-state">
+                  <strong>No task is driving this workspace yet.</strong>
+                  <p>
+                    Start with one real assignment, revision target, or project. Then add
+                    course context and reminders so StudyFlow can surface the next move
+                    instead of an empty board.
+                  </p>
+                  <div className="role-empty-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        setEditing(null);
+                        setShowModal(true);
+                      }}
+                    >
+                      Create First Task
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setView("courses")}
+                    >
+                      Open Courses
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={enableNotifications}
+                      disabled={notificationsEnabled}
+                    >
+                      {notificationsEnabled ? "Reminders Enabled" : "Enable Reminders"}
+                    </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="kanban-shell">
+                  <div className="kanban-shell-hint">
+                    Scroll across lanes and inside each lane to review longer task queues.
+                  </div>
+                  <div className="kanban">
+                    {Object.entries(columns).map(([columnName, items]) => {
+                      const columnMeta = KANBAN_COLUMN_META[columnName] || {
+                        label: columnName,
+                        subtitle: "",
+                        dotClassName: "kanban-dot-todo",
+                      };
+
+                      return (
+                        <div
+                          key={columnName}
+                          className={`kanban-col ${
+                            columnName === "Submitted" ? "col-review" : ""
+                          }`}
+                        >
+                          <div className="kanban-head">
+                            <div className="kanban-title-group">
+                              <div className="kanban-title-row">
+                                <span className={`kanban-dot ${columnMeta.dotClassName}`} />
+                                <div className="kanban-title">{columnMeta.label}</div>
+                              </div>
+                              {!!columnMeta.subtitle && (
+                                <div className="kanban-subtitle">{columnMeta.subtitle}</div>
+                              )}
+                            </div>
+                            <div className="kanban-count">{items.length}</div>
+                          </div>
+
+                          <div className="kanban-scroll">
+                            <div className="kanban-cards">
+                              {items.map((todo) => (
+                                <TodoCard
+                                  key={todo.id}
+                                  todo={todo}
+                                  highlighted={todo.id === highlightTaskId}
+                                  onEdit={(entry) => {
+                                    setEditing(entry);
+                                    setShowModal(true);
+                                  }}
+                                  onDelete={(entry) => setDeleting(entry)}
+                                />
+                              ))}
+                            </div>
+
+                            {!items.length && (
+                              <div className="empty-col">
+                                {columnName === "Todo"
+                                  ? "No tasks waiting to be started."
+                                  : columnName === "In Progress"
+                                    ? "Nothing is currently in motion."
+                                    : columnName === "Submitted"
+                                      ? "No work is waiting for review."
+                                      : "Nothing has been graded yet."}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
           </div>
 
-          <aside className="workspace-side">
-            <section className="panel panel-elevated">
-              <div className="panel-kicker">Focus queue</div>
-              <div className="panel-title">Next Moves</div>
-              <div className="calendar-list">
-                {focusQueue.length ? (
-                  focusQueue.map((todo) => (
-                    <div key={todo.id} className="calendar-item">
-                      <div>
-                        <div className="calendar-title">{todo.title}</div>
-                        <div className="calendar-meta">
-                          {todo.category} | {todo.status}
+          <section className="panel panel-elevated">
+            <div className="panel-headline">
+              <div>
+                <div className="panel-kicker">Quick views</div>
+                <div className="panel-title">Focus, Deadlines, and Support</div>
+                <div className="panel-copy">
+                  Open these supporting views only when you need them, so the kanban remains the primary working surface.
+                </div>
+              </div>
+            </div>
+
+            <div className="task-utility-buttons">
+              {taskUtilityItems.map((item) => {
+                const isActive = openTaskUtility === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`task-utility-button ${isActive ? "active" : ""}`}
+                    onClick={() =>
+                      setOpenTaskUtility((prev) => (prev === item.id ? "" : item.id))
+                    }
+                  >
+                    <span>{item.label}</span>
+                    <span className="task-utility-count">{item.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {!openTaskUtility ? (
+              <div className="empty-col">
+                Open Focus Queue, Deadlines, or Parent Review when you want supporting context without shrinking the board.
+              </div>
+            ) : (
+              <div className="task-utility-panel">
+                {openTaskUtility === "focus" && (
+                  <>
+                    <div className="panel-kicker">Focus queue</div>
+                    <div className="panel-title">Next Moves</div>
+                    <div className="calendar-list">
+                      {focusQueue.length ? (
+                        focusQueue.map((todo) => (
+                          <div key={todo.id} className="calendar-item">
+                            <div>
+                              <div className="calendar-title">{todo.title}</div>
+                              <div className="calendar-meta">
+                                {todo.category} | {todo.status}
+                              </div>
+                            </div>
+                            <div className="calendar-date">{formatDateTime(todo.deadline)}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-col">
+                          No urgent focus items yet. Create a task or enroll in a course to start building momentum.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {openTaskUtility === "deadlines" && (
+                  <>
+                    <div className="panel-kicker">Deadlines</div>
+                    <div className="panel-title">Upcoming Deadlines</div>
+                    {upcomingDeadlines.length ? (
+                      <div className="calendar-list">
+                        {upcomingDeadlines.map((todo) => (
+                          <div key={todo.id} className="calendar-item">
+                            <div>
+                              <div className="calendar-title">{todo.title}</div>
+                              <div className="calendar-meta">
+                                {todo.category} | {todo.status}
+                              </div>
+                            </div>
+                            <div className="calendar-date">{formatDateTime(todo.deadline)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty-col">
+                        No upcoming deadlines yet. Add a task or course assessment so StudyFlow can warn you before work becomes urgent.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {openTaskUtility === "support" && (
+                  <>
+                    <div className="panel-kicker">Support</div>
+                    <div className="panel-title">Parent Review</div>
+                    {isUnder18(user.dateOfBirth) && parentLinkCode && (
+                      <div className="review-summary-box" style={{ marginBottom: "0.6rem" }}>
+                        Parent Link Code: <strong>{parentLinkCode}</strong>
+                        <div className="calendar-meta" style={{ marginTop: "0.35rem" }}>
+                          Share this code with your parent/guardian so they can link to your account.
                         </div>
                       </div>
-                      <div className="calendar-date">{formatDateTime(todo.deadline)}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-col">
-                    No urgent focus items yet. Create a task or enroll in a course to start building momentum.
-                  </div>
-                )}
-              </div>
-            </section>
+                    )}
 
-            <section className="panel panel-elevated">
-              <div className="panel-kicker">Deadlines</div>
-              <div className="panel-title">Upcoming Deadlines</div>
-              {upcomingDeadlines.length ? (
-                <div className="calendar-list">
-                  {upcomingDeadlines.map((todo) => (
-                    <div key={todo.id} className="calendar-item">
-                      <div>
-                        <div className="calendar-title">{todo.title}</div>
-                        <div className="calendar-meta">
-                          {todo.category} | {todo.status}
+                    {parentReviewPreview && (
+                      <div className="insight-card" style={{ marginBottom: "0.75rem" }}>
+                        <span className="insight-label">Latest review</span>
+                        <strong>{parentReviewPreview.parentName || "Parent"}</strong>
+                        <p>{parentReviewPreview.reviewText}</p>
+                      </div>
+                    )}
+
+                    <div className="calendar-list">
+                      {parentReviews.map((review) => (
+                        <div key={review.id} className="review-card">
+                          <div className="review-card-header">
+                            <div className="review-card-title">{review.parentName || "Parent"}</div>
+                            <div className="calendar-meta">
+                              {review.rating} star{review.rating > 1 ? "s" : ""}
+                            </div>
+                          </div>
+                          <div className="review-summary-box">{review.reviewText}</div>
+                          <div className="calendar-meta">
+                            Updated: {formatDateTime(review.updatedAt)}
+                          </div>
                         </div>
-                      </div>
-                      <div className="calendar-date">{formatDateTime(todo.deadline)}</div>
+                      ))}
+                      {!parentReviews.length && (
+                        <div className="empty-col">
+                          No parent reviews yet. Support notes from a linked parent or guardian will appear here once they start contributing.
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-col">No upcoming deadlines yet.</div>
-              )}
-            </section>
-
-            <section className="panel panel-elevated">
-              <div className="panel-kicker">Support</div>
-              <div className="panel-title">Parent Review</div>
-              {isUnder18(user.dateOfBirth) && parentLinkCode && (
-                <div className="review-summary-box" style={{ marginBottom: "0.6rem" }}>
-                  Parent Link Code: <strong>{parentLinkCode}</strong>
-                  <div className="calendar-meta" style={{ marginTop: "0.35rem" }}>
-                    Share this code with your parent/guardian so they can link to your account.
-                  </div>
-                </div>
-              )}
-
-              {parentReviewPreview && (
-                <div className="insight-card" style={{ marginBottom: "0.75rem" }}>
-                  <span className="insight-label">Latest review</span>
-                  <strong>{parentReviewPreview.parentName || "Parent"}</strong>
-                  <p>{parentReviewPreview.reviewText}</p>
-                </div>
-              )}
-
-              <div className="calendar-list">
-                {parentReviews.map((review) => (
-                  <div key={review.id} className="review-card">
-                    <div className="review-card-header">
-                      <div className="review-card-title">{review.parentName || "Parent"}</div>
-                      <div className="calendar-meta">
-                        {review.rating} star{review.rating > 1 ? "s" : ""}
-                      </div>
-                    </div>
-                    <div className="review-summary-box">{review.reviewText}</div>
-                    <div className="calendar-meta">
-                      Updated: {formatDateTime(review.updatedAt)}
-                    </div>
-                  </div>
-                ))}
-                {!parentReviews.length && (
-                  <div className="empty-col">No parent reviews yet.</div>
+                  </>
                 )}
               </div>
-            </section>
-          </aside>
+            )}
+          </section>
         </div>
       )}
 

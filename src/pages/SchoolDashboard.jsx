@@ -71,6 +71,22 @@ const SCHOOL_MODULE_META = {
   },
 };
 
+const SCHOOL_MODULE_TABS = [
+  { id: "tasks", label: "Tasks" },
+  { id: "fees", label: "Fees" },
+  { id: "courses", label: "Courses" },
+  { id: "collab", label: "Collab Hub" },
+  { id: "market", label: "Marketplace" },
+];
+
+const GOVERNANCE_MODULE_TABS = [
+  { id: "tasks", label: "Tasks" },
+  { id: "courses", label: "Courses" },
+  { id: "fees", label: "Fees" },
+  { id: "collab", label: "Collab Hub" },
+  { id: "market", label: "Marketplace" },
+];
+
 function toggleId(arr, id) {
   // Tiny helper: select/unselect student IDs.
   return arr.includes(id) ? arr.filter((entry) => entry !== id) : [...arr, id];
@@ -108,6 +124,7 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
   const roleLabel = ROLE_LABELS[user.role] || "Dashboard";
   const isSchoolRole = user.role === "school";
   const isStateOrFederal = user.role === "state" || user.role === "federal";
+  const moduleTabs = isSchoolRole ? SCHOOL_MODULE_TABS : GOVERNANCE_MODULE_TABS;
 
   async function loadDashboard() {
     // Pull all datasets needed for assignment/review in one round trip.
@@ -220,6 +237,28 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
       (notificationSummary?.byModule?.market || 0) +
       Number(scorecard?.disputeMetrics?.openDisputes || 0),
   };
+  const hasActiveFilters =
+    statusFilter !== "All" || lgaFilter !== "all" || schoolFilter !== "all";
+  const taskControlHeadline = !visibleStudents.length
+    ? "Confirm scope before operational work begins."
+    : visibleSubmittedCount > 0
+      ? isSchoolRole
+        ? "Review submitted work before backlog affects outcomes."
+        : "Review the strongest intervention signals before slippage spreads."
+      : selectedStudentIds.length > 0
+        ? "Selected students are ready for the next assignment."
+        : isSchoolRole
+          ? "Push the next high-value task and keep follow-through visible."
+          : "Keep oversight moving with the next task or review action.";
+  const taskControlCopy = !visibleStudents.length
+    ? hasActiveFilters
+      ? "Current filters may be hiding your working scope. Clear them or refresh data so approved students and schools are visible again."
+      : "Refresh scope and confirm that approved students and schools are available before assigning work or reviewing performance."
+    : visibleSubmittedCount > 0
+      ? "Keep submitted work visible until grading is complete so students, schools, and intervention teams are not operating on stale signals."
+      : selectedStudentIds.length > 0
+        ? "Use the assignment form to push the next piece of work while your intended student set is still selected."
+        : "Narrow scope only when needed, select students in context, and keep assignments, reviews, and revenue operations connected.";
   const onboardingItems = [
     {
       id: "students",
@@ -241,7 +280,9 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
       id: "review-submissions",
       title: "Review submitted work",
       description: "Open the review stream and grade submitted tasks so students see feedback quickly.",
-      done: (analytics?.submittedCount || 0) > 0,
+      done:
+        (analytics?.tasksReviewedCount || 0) > 0 ||
+        visibleTasks.some((task) => Boolean(task.grade)),
       actionLabel: "Open Review",
       onAction: () => setView("tasks"),
     },
@@ -280,6 +321,12 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
       }
     }
   }, [navRoute, tasks]);
+
+  function resetFilters() {
+    setStatusFilter("All");
+    setLgaFilter("all");
+    setSchoolFilter("all");
+  }
 
   async function assignTask() {
     // Guardrails first, then submit assignment payload.
@@ -360,56 +407,27 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
         user={user}
         workspaceKey="school_home"
         title="Prepare your operations workspace"
-        description="Complete these setup actions so assignment delivery, courses, collaboration, and payments all have a clean starting point."
+        description={
+          isSchoolRole
+            ? "Complete these setup actions so outcomes, communication, and revenue collection start from a clean operational base."
+            : "Complete these setup actions so intervention, oversight, and academic monitoring start from a clean operational base."
+        }
         items={onboardingItems}
       />
 
       <div className="view-tabs module-tabs">
-        <button
-          className={`view-tab module-tab ${view === "tasks" ? "active" : ""}`}
-          onClick={() => setView("tasks")}
-        >
-          Tasks
-          {moduleTabCounts.tasks > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.tasks}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "courses" ? "active" : ""}`}
-          onClick={() => setView("courses")}
-        >
-          Courses
-          {moduleTabCounts.courses > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.courses}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "collab" ? "active" : ""}`}
-          onClick={() => setView("collab")}
-        >
-          Collab Hub
-          {moduleTabCounts.collab > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.collab}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "fees" ? "active" : ""}`}
-          onClick={() => setView("fees")}
-        >
-          Fees
-          {moduleTabCounts.fees > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.fees}</span>
-          )}
-        </button>
-        <button
-          className={`view-tab module-tab ${view === "market" ? "active" : ""}`}
-          onClick={() => setView("market")}
-        >
-          Marketplace
-          {moduleTabCounts.market > 0 && (
-            <span className="module-tab-badge">{moduleTabCounts.market}</span>
-          )}
-        </button>
+        {moduleTabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`view-tab module-tab ${view === tab.id ? "active" : ""}`}
+            onClick={() => setView(tab.id)}
+          >
+            {tab.label}
+            {moduleTabCounts[tab.id] > 0 && (
+              <span className="module-tab-badge">{moduleTabCounts[tab.id]}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       <section className="module-hero">
@@ -478,10 +496,8 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
             <div className="command-center-head">
               <div className="command-center-copy">
                 <div className="panel-kicker">{roleLabel} control</div>
-                <h3>Assign, review, and monitor from one task workspace.</h3>
-                <p>
-                  Narrow scope with filters, select students in context, and keep submitted work visible until grading is complete.
-                </p>
+                <h3>{taskControlHeadline}</h3>
+                <p>{taskControlCopy}</p>
               </div>
               <div className="command-center-actions">
                 <div className="command-metric">
@@ -815,13 +831,33 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
                 </span>
               </label>
             ))}
-
-            {!visibleStudents.length && (
-              <div className="empty-col">No students in this scope/filter.</div>
-            )}
           </div>
+          {!visibleStudents.length && (
+            <div className="role-empty-state role-empty-state-compact">
+              <strong>No students are visible in the current working scope.</strong>
+              <p>
+                {hasActiveFilters
+                  ? "Current filters are hiding the assignment target. Clear filters or refresh scope before pushing the next task."
+                  : "Refresh scope and confirm that approved students exist in this school or governance view before assigning work."}
+              </p>
+              <div className="role-empty-actions">
+                {hasActiveFilters && (
+                  <button className="btn btn-ghost btn-sm" onClick={resetFilters}>
+                    Clear Filters
+                  </button>
+                )}
+                <button className="btn btn-primary btn-sm" onClick={loadDashboard}>
+                  Refresh Scope
+                </button>
+              </div>
+            </div>
+          )}
 
-          <button className="btn btn-primary btn-full" onClick={assignTask}>
+          <button
+            className="btn btn-primary btn-full"
+            onClick={assignTask}
+            disabled={!selectedStudentIds.length || !assignment.title.trim()}
+          >
             Assign Task to {selectedStudentIds.length || 0} Student(s)
           </button>
           {selectedVisibleCount > 0 && (
@@ -900,7 +936,32 @@ function SchoolDashboard({ user, navRoute, notificationSummary }) {
           </div>
 
           {!filteredTasks.length && (
-            <div className="empty-col">No tasks match this filter.</div>
+            <div className="role-empty-state role-empty-state-compact">
+              <strong>No tasks match the current review view.</strong>
+              <p>
+                {hasActiveFilters
+                  ? "Expand the scope or show more statuses to bring back the right review queue."
+                  : "Assign the next task or wait for submissions and grades to start building a stronger review stream."}
+              </p>
+              <div className="role-empty-actions">
+                {statusFilter !== "All" && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setStatusFilter("All")}
+                  >
+                    Show All Statuses
+                  </button>
+                )}
+                {hasActiveFilters && (
+                  <button className="btn btn-ghost btn-sm" onClick={resetFilters}>
+                    Clear Filters
+                  </button>
+                )}
+                <button className="btn btn-primary btn-sm" onClick={loadDashboard}>
+                  Refresh
+                </button>
+              </div>
+            </div>
           )}
         </section>
       </div>

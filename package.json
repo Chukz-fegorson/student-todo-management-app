@@ -4,9 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-runner.mjs",
+    "frontend": "vite",
+    "backend": "npm --prefix server run start",
+    "backend:watch": "npm --prefix server run dev",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test --test-isolation=none",
     "preview": "vite preview"
   },
   "dependencies": {

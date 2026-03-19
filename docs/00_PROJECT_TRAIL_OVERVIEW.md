@@ -1,6 +1,6 @@
 # StudyFlow Project Trail Overview
 
-Last updated: March 6, 2026
+Last updated: March 18, 2026
 
 ## 1. Product Vision
 
@@ -69,10 +69,11 @@ Current implementation already covers major foundations for:
 
 Remaining expansions to reach full end goal:
 
+- architecture hardening across backend, frontend, CSS system, and integration coverage
 - external AI provider integration (ChatGPT/Whisper)
 - real-time communication hardening (production RTC stack)
 - wallet/escrow and auction/negotiation economics
-- broader community graph and moderation automation
+- broader media-rich community graph and moderation automation
 - production-grade reporting and governance intelligence
 
 ## 5. Document Map
@@ -81,4 +82,4 @@ Remaining expansions to reach full end goal:
 - `docs/02_IMPLEMENTATION_WORKFLOW.md`
 - `docs/03_CHANGE_REQUEST_LOG.md`
 - `docs/04_PROCESS_FLOW_CURRENT_VS_END_GOAL.md`
-
+- `docs/06_PHASE0_EXECUTION_PLAN.md`

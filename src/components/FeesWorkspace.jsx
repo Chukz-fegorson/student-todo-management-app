@@ -1,48 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
-
-function formatNaira(value) {
-  return `N${Number(value || 0).toLocaleString()}`;
-}
-
-function amountNairaFromInvoice(invoice) {
-  if (Number.isFinite(Number(invoice.amountNaira))) return Number(invoice.amountNaira);
-  return Number(invoice.amountKobo || 0) / 100;
-}
-
-function amountNairaFromPlan(plan) {
-  if (Number.isFinite(Number(plan.amountNaira))) return Number(plan.amountNaira);
-  return Number(plan.amountKobo || 0) / 100;
-}
-
-function getInvoiceItems(invoice) {
-  if (Array.isArray(invoice?.items) && invoice.items.length) return invoice.items;
-  return [
-    {
-      id: `${invoice?.id || "invoice"}-fallback`,
-      title: invoice?.title || "School Fees",
-      description: invoice?.description || "",
-      amountNaira: amountNairaFromInvoice(invoice || {}),
-    },
-  ];
-}
-
-function getInvoicePurposeLabel(invoice) {
-  const items = getInvoiceItems(invoice);
-  if (!items.length) return invoice?.title || "School fees";
-  if (items.length === 1) return items[0].title || invoice?.title || "School fees";
-  return `${items.length} fee items`;
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read receipt file"));
-    reader.readAsDataURL(file);
-  });
-}
+import {
+  amountNairaFromInvoice,
+  amountNairaFromPlan,
+  formatNaira,
+  getInvoiceItems,
+} from "../lib/fees";
+import { useFeesWorkspace } from "../hooks/useFeesWorkspace";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -416,422 +379,46 @@ function downloadInvoiceDocument(invoice) {
 }
 
 export default function FeesWorkspace({ user, navRoute }) {
-  const [plans, setPlans] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-
-  const [planForm, setPlanForm] = useState({
-    title: "",
-    amountNaira: "",
-    termLabel: "",
-    academicSession: "",
-    description: "",
-  });
-  const [invoiceForm, setInvoiceForm] = useState({
-    studentIds: [],
-    planId: "",
-    title: "",
-    amountNaira: "",
-    dueAt: "",
-    description: "",
-  });
-  const [selectedPlanIds, setSelectedPlanIds] = useState([]);
-  const [paymentDrafts, setPaymentDrafts] = useState({});
-  const [schoolReceiptNotes, setSchoolReceiptNotes] = useState({});
-
-  const isStudent = user.role === "student";
-  const canManageFees =
-    user.role === "school" || user.role === "state" || user.role === "federal";
-
-  const recentPayments = useMemo(() => {
-    return [...payments]
-      .sort((a, b) => {
-        const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        return bTs - aTs;
-      })
-      .slice(0, 80);
-  }, [payments]);
-
-  const loadData = useCallback(async () => {
-    try {
-      setError("");
-      setLoading(true);
-      const requests = [apiGet("/fees/plans"), apiGet("/fees/invoices"), apiGet("/fees/payments")];
-      if (!isStudent) requests.push(apiGet("/students"));
-      const [plansData, invoicesData, paymentsData, studentsData] = await Promise.all(requests);
-      setPlans(Array.isArray(plansData) ? plansData : []);
-      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
-      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
-    } catch (err) {
-      setError(err.message || "Failed to load fee workspace");
-    } finally {
-      setLoading(false);
-    }
-  }, [isStudent]);
-
-  useEffect(() => {
-    loadData();
-  }, [user.id, loadData]);
-
-  useEffect(() => {
-    if (navRoute?.module !== "fees" || !navRoute?.entityId) return;
-    const matchedInvoice = invoices.find((invoice) => invoice.id === navRoute.entityId);
-    if (!matchedInvoice) return;
-    jumpToInvoice(matchedInvoice.id);
-    if (isStudent && matchedInvoice.status === "Unpaid") {
-      updatePaymentDraft(matchedInvoice.id, {
-        open: true,
-        paidForLabel: getInvoicePurposeLabel(matchedInvoice),
-      });
-    }
-  }, [navRoute, invoices, isStudent]);
-
-  const pendingPayments = useMemo(
-    () => payments.filter((entry) => entry.status === "PendingConfirmation"),
-    [payments]
-  );
-  const unpaidInvoices = useMemo(
-    () => invoices.filter((entry) => entry.status === "Unpaid"),
-    [invoices]
-  );
-  const activeInvoices = useMemo(
-    () => invoices.filter((entry) => ["Unpaid", "PendingConfirmation"].includes(entry.status)),
-    [invoices]
-  );
-  const totalOutstandingNaira = useMemo(
-    () =>
-      unpaidInvoices.reduce(
-        (sum, invoice) => sum + amountNairaFromInvoice(invoice),
-        0
-      ),
-    [unpaidInvoices]
-  );
-  const confirmedPayments = useMemo(
-    () =>
-      recentPayments.filter(
-        (entry) => entry.status !== "PendingConfirmation"
-      ),
-    [recentPayments]
-  );
-  const activeInvoiceByPlanId = useMemo(() => {
-    const map = new Map();
-    activeInvoices.forEach((invoice) => {
-      getInvoiceItems(invoice).forEach((item) => {
-        if (item.planId && !map.has(item.planId)) {
-          map.set(item.planId, invoice);
-        }
-      });
-    });
-    return map;
-  }, [activeInvoices]);
-  const paidInvoiceByPlanId = useMemo(() => {
-    const map = new Map();
-    invoices
-      .filter((invoice) => invoice.status === "Paid")
-      .forEach((invoice) => {
-        getInvoiceItems(invoice).forEach((item) => {
-          if (item.planId && !map.has(item.planId)) {
-            map.set(item.planId, invoice);
-          }
-        });
-      });
-    return map;
-  }, [invoices]);
-  const selectedPlans = useMemo(
-    () => plans.filter((plan) => selectedPlanIds.includes(plan.id)),
-    [plans, selectedPlanIds]
-  );
-  const selectedPlanTotalNaira = useMemo(
-    () => selectedPlans.reduce((sum, plan) => sum + amountNairaFromPlan(plan), 0),
-    [selectedPlans]
-  );
-
-  function getPaymentDraft(invoice) {
-    const existing = paymentDrafts[invoice.id];
-    if (existing) return existing;
-    return {
-      open: false,
-      paidForLabel: getInvoicePurposeLabel(invoice),
-      paymentMethod: "transfer",
-      transactionReference: "",
-      receiptMedia: [],
-      receiptUrlDraft: "",
-      notes: "",
-    };
-  }
-
-  function updatePaymentDraft(invoiceId, patch) {
-    setPaymentDrafts((prev) => {
-      const current = prev[invoiceId] || {
-        open: false,
-        paidForLabel: "",
-        paymentMethod: "transfer",
-        transactionReference: "",
-        receiptMedia: [],
-        receiptUrlDraft: "",
-        notes: "",
-      };
-      return {
-        ...prev,
-        [invoiceId]: {
-          ...current,
-          ...patch,
-        },
-      };
-    });
-  }
-
-  function updateSchoolReceiptNote(paymentId, value) {
-    setSchoolReceiptNotes((prev) => ({
-      ...prev,
-      [paymentId]: value,
-    }));
-  }
-
-  function jumpToInvoice(invoiceId) {
-    if (!invoiceId) return;
-    const element = document.getElementById(`fee-invoice-${invoiceId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
-  function togglePlanSelection(planId) {
-    setSelectedPlanIds((prev) =>
-      prev.includes(planId)
-        ? prev.filter((entry) => entry !== planId)
-        : [...prev, planId]
-    );
-  }
-
-  async function addReceiptFiles(invoiceId, event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    try {
-      setBusy(true);
-      const mediaItems = [];
-      for (const file of files.slice(0, 4)) {
-        if (file.size > 8 * 1024 * 1024) continue;
-        const dataUrl = await fileToDataUrl(file);
-        mediaItems.push({
-          id: window.crypto.randomUUID(),
-          kind: String(file.type || "").startsWith("video/") ? "video" : "image",
-          url: dataUrl,
-          name: file.name,
-          mimeType: file.type,
-          size: file.size,
-        });
-      }
-      const draft = getPaymentDraft({ id: invoiceId, title: "" });
-      updatePaymentDraft(invoiceId, {
-        receiptMedia: [...draft.receiptMedia, ...mediaItems].slice(0, 8),
-      });
-      if (!mediaItems.length) {
-        setError(
-          "No valid files were added. Use images/videos up to 8MB each."
-        );
-      }
-    } catch (err) {
-      setError(err.message || "Failed to read receipt file.");
-    } finally {
-      setBusy(false);
-      event.target.value = "";
-    }
-  }
-
-  function addReceiptUrl(invoiceId) {
-    const draft = getPaymentDraft({ id: invoiceId, title: "" });
-    const url = String(draft.receiptUrlDraft || "").trim();
-    if (!url) return;
-    updatePaymentDraft(invoiceId, {
-      receiptMedia: [
-        ...draft.receiptMedia,
-        { id: window.crypto.randomUUID(), kind: "image", url },
-      ].slice(0, 8),
-      receiptUrlDraft: "",
-    });
-  }
-
-  function removeReceiptMedia(invoiceId, mediaId) {
-    const draft = getPaymentDraft({ id: invoiceId, title: "" });
-    updatePaymentDraft(invoiceId, {
-      receiptMedia: draft.receiptMedia.filter((entry) => entry.id !== mediaId),
-    });
-  }
-
-  async function createPlan() {
-    if (!planForm.title.trim()) {
-      setError("Plan title is required.");
-      return;
-    }
-    if (!Number(planForm.amountNaira)) {
-      setError("Plan amount is required.");
-      return;
-    }
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost("/fees/plans", {
-        title: planForm.title.trim(),
-        amountNaira: Number(planForm.amountNaira),
-        termLabel: planForm.termLabel.trim() || null,
-        academicSession: planForm.academicSession.trim() || null,
-        description: planForm.description.trim() || null,
-      });
-      setNotice("Fee plan created.");
-      setPlanForm({
-        title: "",
-        amountNaira: "",
-        termLabel: "",
-        academicSession: "",
-        description: "",
-      });
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Failed to create fee plan.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createInvoices() {
-    if (!invoiceForm.studentIds.length) {
-      setError("Select at least one student.");
-      return;
-    }
-    try {
-      setBusy(true);
-      setError("");
-      const payload = {
-        studentIds: invoiceForm.studentIds,
-        planId: invoiceForm.planId || null,
-        title: invoiceForm.title.trim() || null,
-        amountNaira: invoiceForm.planId ? null : Number(invoiceForm.amountNaira || 0),
-        dueAt: invoiceForm.dueAt ? new Date(invoiceForm.dueAt).toISOString() : null,
-        description: invoiceForm.description.trim() || null,
-      };
-      await apiPost("/fees/invoices", payload);
-      setNotice("Invoices issued.");
-      setInvoiceForm({
-        studentIds: [],
-        planId: "",
-        title: "",
-        amountNaira: "",
-        dueAt: "",
-        description: "",
-      });
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Failed to issue invoices.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createStudentInvoiceFromPlans() {
-    if (!selectedPlanIds.length) {
-      setError("Select at least one school fee plan.");
-      return;
-    }
-
-    try {
-      setBusy(true);
-      setError("");
-      const createdInvoice = await apiPost("/fees/invoices/from-plans", {
-        planIds: selectedPlanIds,
-      });
-      setNotice(
-        selectedPlanIds.length === 1
-          ? "Invoice generated from the selected fee plan. Complete payment below."
-          : "Combined invoice generated from selected fee plans. Complete payment below."
-      );
-      setSelectedPlanIds([]);
-      updatePaymentDraft(createdInvoice.id, {
-        open: true,
-        paidForLabel: getInvoicePurposeLabel(createdInvoice),
-      });
-      await loadData();
-      window.setTimeout(() => {
-        jumpToInvoice(createdInvoice.id);
-      }, 120);
-    } catch (err) {
-      setError(err.message || "Failed to generate invoice from selected plans.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function markInvoicePaid(invoiceId) {
-    const invoice = invoices.find((entry) => entry.id === invoiceId);
-    const draft = getPaymentDraft(invoice || { id: invoiceId, title: "" });
-    const paidForLabel = String(draft.paidForLabel || "").trim();
-    const paymentMethod = String(draft.paymentMethod || "transfer").trim();
-    const transactionReference = String(draft.transactionReference || "").trim();
-    const notes = String(draft.notes || "").trim();
-
-    if (!paidForLabel) {
-      setError("Tell the school what this payment is for.");
-      return;
-    }
-    if (paymentMethod !== "on_platform" && !draft.receiptMedia.length) {
-      setError(
-        "Upload receipt image/video (or add URL) before sending for confirmation."
-      );
-      return;
-    }
-
-    try {
-      setBusy(true);
-      setError("");
-      const payment = await apiPost(`/fees/invoices/${invoiceId}/mark-paid`, {
-        paidForLabel,
-        paymentMethod,
-        transactionReference: transactionReference || null,
-        receiptMedia: draft.receiptMedia,
-        notes: notes || null,
-      });
-      setNotice(
-        payment?.confirmationCode
-          ? `Payment proof submitted. Ref code: ${payment.confirmationCode}.`
-          : "Payment proof submitted for school confirmation."
-      );
-      setPaymentDrafts((prev) => {
-        const next = { ...prev };
-        delete next[invoiceId];
-        return next;
-      });
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Failed to submit payment proof.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmPayment(paymentId) {
-    const note = String(schoolReceiptNotes[paymentId] || "").trim();
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/fees/payments/${paymentId}/confirm`, {
-        schoolReceiptNote: note || null,
-      });
-      setNotice("Payment confirmed and school receipt issued.");
-      setSchoolReceiptNotes((prev) => ({ ...prev, [paymentId]: "" }));
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Failed to confirm payment.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const {
+    activeInvoiceByPlanId,
+    addReceiptFiles,
+    addReceiptUrl,
+    busy,
+    canManageFees,
+    confirmPayment,
+    confirmedPayments,
+    createInvoices,
+    createPlan,
+    createStudentInvoiceFromPlans,
+    error,
+    getPaymentDraft,
+    invoices,
+    invoiceForm,
+    isStudent,
+    jumpToInvoice,
+    loading,
+    markInvoicePaid,
+    notice,
+    paidInvoiceByPlanId,
+    pendingPayments,
+    planForm,
+    plans,
+    recentPayments,
+    removeReceiptMedia,
+    schoolReceiptNotes,
+    selectedPlanIds,
+    selectedPlanTotalNaira,
+    selectedPlans,
+    setInvoiceForm,
+    setNotice,
+    setPlanForm,
+    students,
+    togglePlanSelection,
+    totalOutstandingNaira,
+    unpaidInvoices,
+    updatePaymentDraft,
+    updateSchoolReceiptNote,
+  } = useFeesWorkspace({ user, navRoute });
 
   if (loading) {
     return (

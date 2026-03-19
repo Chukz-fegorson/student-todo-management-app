@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+
+:root {
+  --bg: #0d0f14;
+  --surface: #161a23;
+  --surface2: #1e2330;
+  --surface3: #242c3d;
+  --border: #2a3042;
+  --accent: #4f8ef7;
+  --accent2: #7b5ea7;
+  --green: #3ecf8e;
+  --amber: #f6b93b;
+  --red: #e84040;
+  --text: #e8eaf0;
+  --muted: #7a8399;
+  --radius: 14px;
+  --font: 'DM Sans', sans-serif;
+  --display: 'Syne', sans-serif;
+  --purple: #a78bfa;
+}

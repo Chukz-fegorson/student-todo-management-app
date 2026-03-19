@@ -10,6 +10,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 ## Core Features
 
 - Student kanban board: `Todo`, `In Progress`, `Submitted`, `Done`
+- Courses workspace with CGPA overview, assessment tracking, and course deadlines
 - Learning Summary required for submitted tasks
 - Grade + feedback workflow with grade-weighted progress
 - Multi-student task assignment for governance roles
@@ -25,8 +26,12 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 
 ## Project Structure
 
-- `src/` frontend app
-- `server/` backend API (separate Node project)
+- `src/pages/` role entrypoints
+- `src/components/` workspace sections and shared UI components
+- `src/hooks/` workspace state and side-effect orchestration (`useStudentWorkspace`, `useSchoolWorkspace`, `useCoursesWorkspace`, `useFeesWorkspace`, `useMarketplaceWorkspace`, `useCollaborationHub`)
+- `src/styles/` layered foundation plus feature CSS files
+- `server/` backend API (separate Node project with `app.js`, shared helpers, and domain route modules under `server/domains/`)
+- `tests/` node-based route and helper coverage, including Phase 0 integration suites for auth, parents, tasks, fees, marketplace, community, and analytics
 - `Student_Management_App.sql` optional manual schema setup
 - `docs/` product + delivery trail documentation
 
@@ -38,6 +43,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - `docs/03_CHANGE_REQUEST_LOG.md`
 - `docs/04_PROCESS_FLOW_CURRENT_VS_END_GOAL.md`
 - `docs/05_CODEBASE_EXPLAINED_FOR_KIDS.md`
+- `docs/06_PHASE0_EXECUTION_PLAN.md`
 
 ## Local Setup
 
@@ -86,10 +92,15 @@ Frontend defaults to `http://localhost:5173`.
 - `DELETE /tasks/:id`
 - `POST /tasks/:id/grade`
 - `GET /analytics/overview`
+- `GET /fees/plans`
+- `POST /market/orders`
+- `GET /feed/posts`
 
 ## Notes
 
 - Backend auto-creates `sf_*` tables on startup.
+- `server/app.js` now mounts commerce and community through dedicated domain route modules instead of one monolithic backend controller.
 - `server/.env` is ignored by git via `server/.gitignore`.
 - Privileged role signups (`school`, `state`, `federal`) require configured signup keys.
 - Login/register endpoints use lightweight rate limiting (`AUTH_RATE_WINDOW_MS`, `AUTH_RATE_MAX_ATTEMPTS`).
+- Current repo validation baseline: `npm test`, `npm run lint`, and `npm run build`.

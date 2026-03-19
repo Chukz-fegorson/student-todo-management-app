@@ -1,6 +1,6 @@
 # StudyFlow Change Request Log
 
-Last updated: March 6, 2026
+Last updated: March 19, 2026
 
 ## 1. Purpose
 
@@ -57,6 +57,15 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-037 | Commerce | Add marketplace payment modes + 2% platform charge accounting | Implemented | order model expanded with mode + platform fee + seller net + bank details |
 | CR-038 | Trust | Add disputes and verification indicators in marketplace safety pipeline | Implemented | dispute APIs/workflow + seller identity verification controls |
 | CR-039 | Analytics | Add role-aware business scorecards and operations metrics | Implemented | `/analytics/scorecard` endpoint + dashboard KPI cards |
+| CR-040 | Phase 0 | Replace monolithic frontend stylesheet with layered style modules | Implemented | `tokens/base/layout/utilities` plus feature layers for tasks, auth, collaboration, interaction, community, commerce, and courses; legacy `app.css` removed |
+| CR-041 | Phase 0 | Split student workspace UI and orchestration into dedicated frontend units | Implemented | `StudentTasksWorkspace` owns the task surface and `useStudentWorkspace` owns student task state, reminders, and modal orchestration |
+| CR-042 | Phase 0 | Split school/governance workspace orchestration and task surface into dedicated frontend units | Implemented | `SchoolTasksWorkspace` now owns assignment/review UI and `useSchoolWorkspace` owns school/state/federal task scope, filters, grading, and analytics orchestration |
+| CR-043 | Phase 0 | Move course delivery orchestration into a dedicated frontend hook | Implemented | `CoursesWorkspace` now renders the course UI while `useCoursesWorkspace` owns course/bundle loading, assessments, enrollment, CGPA, and payment-selection workflows |
+| CR-044 | Phase 0 | Move fees workflow orchestration into shared frontend helpers and a dedicated hook | Implemented | `FeesWorkspace` now renders the fee UI while `src/lib/fees.js` owns reusable fee helpers and `useFeesWorkspace` owns plans, invoices, payment evidence, confirmation, and navigation reactions |
+| CR-045 | Phase 0 | Move marketplace orchestration into shared frontend helpers and a dedicated hook | Implemented | `MarketplaceWorkspace` now renders the commerce UI while `src/lib/marketplace.js` owns reusable marketplace helpers and `useMarketplaceWorkspace` owns filters, listings, orders, disputes, moderation, and route reactions |
+| CR-046 | Phase 0 | Move collaboration hub orchestration into shared frontend helpers and a dedicated hook | Implemented | `CollaborationHubModal` now renders the collaboration UI while `src/lib/collaboration.js` owns reusable collab helpers and `useCollaborationHub` owns chat, meetings, transcript, AI summary, action-item sync, and navigation reactions |
+| CR-047 | Phase 0 | Split backend commerce and community routes into dedicated domain modules | Implemented | `server/app.js` now mounts `server/domains/commerce` and `server/domains/community`; fees, marketplace, feed, and schema bootstrap no longer depend on one multi-thousand-line backend controller |
+| CR-048 | Phase 0 | Add route-level integration coverage for the Phase 0 backend flows | Implemented | Node HTTP integration suites now cover auth, parent, task, fees, marketplace, community, and analytics boundaries through dedicated route-module tests in `tests/` |
 
 ## 4. Key Technical Change Highlights
 
@@ -64,6 +73,8 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 - role/scope authorization expanded incrementally without breaking existing users
 - UI redesign was delivered as module-first, keeping primary workflows accessible
 - commerce and feed modules were developed with moderation and auditability in mind
+- Phase 0 frontend hardening is now active in production code through layered CSS plus dedicated student, school, course, fees, marketplace, and collaboration workspace seams
+- Phase 0 backend hardening is now active in production code through modular commerce/community route families and route-level integration coverage for the required high-value flows
 
 ## 5. Audit Note
 

@@ -1,6 +1,6 @@
 # StudyFlow Process Flow: Current State vs End Goal
 
-Last updated: March 6, 2026
+Last updated: March 18, 2026
 
 ## 1. End Goal Statement
 
@@ -113,15 +113,16 @@ flowchart TD
 
 ## 5. Target Roadmap to Close Gaps
 
-1. Integrate external AI providers (transcription + summarization + action orchestration).
-2. Introduce wallet/escrow architecture for marketplace and auction bids.
-3. Expand community into channel/thread/topic model with stronger moderation tooling.
-4. Add payment gateway integrations for online fee settlement and reconciliation.
-5. Build governance intelligence layer for state/federal KPI, risk alerts, and intervention workflows.
+1. Complete Phase 0 architecture hardening so the current platform can absorb the next growth cycle safely.
+2. Integrate external AI providers (transcription + summarization + action orchestration).
+3. Add payment gateway integrations for online fee settlement and reconciliation.
+4. Introduce wallet/escrow architecture for marketplace and auction bids.
+5. Expand community into a media-rich channel/thread/topic model with stronger moderation tooling and photo/video upload support.
+6. Build governance intelligence layer for state/federal KPI, risk alerts, and intervention workflows.
 
 ## 5.1 Active Implementation Order (Locked)
 
-This is the active order being executed now:
+This was the last locked execution order:
 
 1. Reliability + audit trail foundation.
 2. Parent/guardian model for under-18 oversight.
@@ -132,7 +133,16 @@ This is the active order being executed now:
 
 Each step is implemented without removing current working flows.
 
-Execution status: completed for this cycle (March 6, 2026 baseline).
+Execution status: completed for that cycle (March 6, 2026 baseline).
+
+## 5.2 Next Locked Execution Order
+
+1. Phase 0 architecture hardening and integration test expansion.
+2. External AI provider integration and collaboration quality uplift.
+3. Real payment rail integration and reconciliation.
+4. Wallet/escrow and auction foundation.
+5. Media-rich social/community expansion with photo/video upload.
+6. Governance intelligence expansion.
 
 ## 6. Product Positioning (Current Truth)
 

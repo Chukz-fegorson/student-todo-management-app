@@ -1,680 +1,81 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
 import {
-  NIGERIA_STATES,
-  buildStateLgaIndex,
-  getLgaOptionsForState,
-} from "../lib/locationData";
-
-// Convert backend kobo values into naira display safely.
-function asNaira(valueKobo, valueNaira) {
-  if (Number.isFinite(Number(valueNaira))) return Number(valueNaira);
-  return Number(valueKobo || 0) / 100;
-}
-
-function toQueryString(params) {
-  // Build API query params and skip empty filters.
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") return;
-    query.set(key, String(value));
-  });
-  const text = query.toString();
-  return text ? `?${text}` : "";
-}
-
-function mediaKindFromFile(file) {
-  if (!file) return "image";
-  return String(file.type || "").startsWith("video/") ? "video" : "image";
-}
-
-function fileToDataUrl(file) {
-  // Read local image/video file so we can preview and upload it.
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-const EMPTY_FILTERS = Object.freeze({
-  q: "",
-  state: "",
-  lga: "",
-  schoolId: "",
-  listingType: "",
-  sellerNearMe: false,
-});
-
-const OTHER_CATEGORY_VALUE = "__other__";
-
-function marketChipMeta(product) {
-  // Badge color/label mapping based on seller governance level.
-  const role = String(product?.sellerRole || "").toLowerCase();
-  if (role === "federal") {
-    return { label: "Federal Market", className: "market-card-chip-federal" };
-  }
-  if (role === "state") {
-    return { label: "State Market", className: "market-card-chip-state" };
-  }
-  if (role === "school" || product?.listingType === "school") {
-    return { label: "School Store", className: "market-card-chip-school" };
-  }
-  return { label: "Student Market", className: "market-card-chip-student" };
-}
-
-function paymentModeLabel(mode) {
-  switch (String(mode || "").toLowerCase()) {
-    case "card":
-      return "Card / Checkout";
-    case "p2p":
-      return "P2P Transfer";
-    case "transfer":
-      return "Bank Transfer";
-    default:
-      return "Cash";
-  }
-}
+  OTHER_CATEGORY_VALUE,
+  asNaira,
+  marketChipMeta,
+  paymentModeLabel,
+} from "../lib/marketplace";
+import { useMarketplaceWorkspace } from "../hooks/useMarketplaceWorkspace";
 
 export default function MarketplaceWorkspace({ user, navRoute }) {
-  // Marketplace state buckets: catalog data, ui states, and form drafts.
-  const [categories, setCategories] = useState([]);
-  const [categoryRequests, setCategoryRequests] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [disputes, setDisputes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-
-  const [filtersDraft, setFiltersDraft] = useState({ ...EMPTY_FILTERS });
-  const [filtersApplied, setFiltersApplied] = useState({ ...EMPTY_FILTERS });
-
-  const [listingForm, setListingForm] = useState({
-    title: "",
-    description: "",
-    categoryId: "",
-    customCategoryName: "",
-    condition: "new",
-    priceNaira: "",
-    quantity: 1,
-    mediaUrls: [],
-    mediaUrlDraft: "",
-  });
-  const [categoryRequestName, setCategoryRequestName] = useState("");
-  const [sellCategoryName, setSellCategoryName] = useState("");
-  const [claimCodes, setClaimCodes] = useState({});
-  const [marketView, setMarketView] = useState("browse");
-
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [detailMediaIndex, setDetailMediaIndex] = useState(0);
-  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
-  const [purchasePaymentMode, setPurchasePaymentMode] = useState("card");
-  const [purchasePaymentReference, setPurchasePaymentReference] = useState("");
-  const [offerDraft, setOfferDraft] = useState({ amountNaira: "", note: "" });
-  const [reviewDraft, setReviewDraft] = useState({ rating: 5, reviewText: "" });
-
-  const canModerate =
-    user.role === "school" || user.role === "state" || user.role === "federal";
-  const canResolveDisputes =
-    user.role === "school" || user.role === "state" || user.role === "federal";
-  // Only student/school can publish listings.
-  const canSell = user.role === "student" || user.role === "school";
-  const listingType = user.role === "school" ? "school" : "student";
-
-  const selectedProduct = useMemo(
-    () => products.find((entry) => entry.id === selectedProductId) || null,
-    [products, selectedProductId]
-  );
-  const selectedMediaList = useMemo(
-    () => (Array.isArray(selectedProduct?.mediaUrls) ? selectedProduct.mediaUrls : []),
-    [selectedProduct]
-  );
-  const selectedMedia =
-    selectedMediaList[detailMediaIndex] || selectedMediaList[0] || null;
-
-  const productCategories = useMemo(
-    () =>
-      categories.filter(
-        (entry) => entry?.status === "approved" && entry.listingType === listingType
-      ),
-    [categories, listingType]
-  );
-  const activeOrders = useMemo(
-    () => orders.filter((entry) => entry.status !== "Completed"),
-    [orders]
-  );
-  const completedOrders = useMemo(
-    () => orders.filter((entry) => entry.status === "Completed"),
-    [orders]
-  );
-  const productStateIndex = useMemo(() => buildStateLgaIndex(products), [products]);
-  const filterLgaOptions = useMemo(
-    () => getLgaOptionsForState(productStateIndex, filtersDraft.state, [filtersDraft.lga]),
-    [productStateIndex, filtersDraft.state, filtersDraft.lga]
-  );
-  const filterStateOptions = useMemo(() => {
-    const discovered = new Set(
-      products
-        .map((product) => String(product.stateName || "").trim())
-        .filter(Boolean)
-    );
-    for (const stateName of NIGERIA_STATES) discovered.add(stateName);
-    if (filtersDraft.state) discovered.add(filtersDraft.state);
-    return Array.from(discovered).sort((a, b) => a.localeCompare(b));
-  }, [products, filtersDraft.state]);
-  const myListingCount = useMemo(
-    () => products.filter((entry) => entry.sellerUserId === user.id).length,
-    [products, user.id]
-  );
-  const openDisputeCount = useMemo(
-    () => disputes.filter((entry) => entry.status === "Open").length,
-    [disputes]
-  );
-  const marketHighlights = {
-    browse: [
-      `${products.length} product${products.length === 1 ? "" : "s"} visible`,
-      `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
-      `${openDisputeCount} open dispute${openDisputeCount === 1 ? "" : "s"}`,
-    ],
-    sell: [
-      `${myListingCount} of your listing${myListingCount === 1 ? "" : "s"} visible`,
-      `${categories.length} approved categor${categories.length === 1 ? "y" : "ies"}`,
-      canSell ? "Create, upload media, and publish in one flow" : "Browse only",
-    ],
-    orders: [
-      `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
-      `${completedOrders.length} completed transaction${completedOrders.length === 1 ? "" : "s"}`,
-      `${disputes.length} dispute record${disputes.length === 1 ? "" : "s"}`,
-    ],
-    moderation: [
-      `${categoryRequests.length} category request${categoryRequests.length === 1 ? "" : "s"}`,
-      `${openDisputeCount} open dispute${openDisputeCount === 1 ? "" : "s"}`,
-      "Review reports and keep marketplace trust intact",
-    ],
-  };
-
-  const loadMarketplace = useCallback(async () => {
-    // Load categories/products/orders (and moderation queue when allowed).
-    try {
-      setError("");
-      setLoading(true);
-      const query = toQueryString({
-        q: filtersApplied.q.trim(),
-        state: filtersApplied.state.trim(),
-        lga: filtersApplied.lga.trim(),
-        schoolId: filtersApplied.schoolId.trim(),
-        listingType: filtersApplied.listingType || null,
-        sellerNearMe: filtersApplied.sellerNearMe ? "true" : null,
-      });
-      const requests = [
-        apiGet("/market/categories"),
-        apiGet(`/market/products${query}`),
-        apiGet("/market/orders"),
-        apiGet("/market/disputes"),
-      ];
-      if (canModerate) requests.push(apiGet("/market/category-requests"));
-      const [categoriesData, productsData, ordersData, disputesData, requestData] =
-        await Promise.all(requests);
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-      setProducts(Array.isArray(productsData) ? productsData : []);
-      setOrders(Array.isArray(ordersData) ? ordersData : []);
-      setDisputes(Array.isArray(disputesData) ? disputesData : []);
-      setCategoryRequests(Array.isArray(requestData) ? requestData : []);
-    } catch (err) {
-      setError(err.message || "Failed to load marketplace workspace.");
-    } finally {
-      setLoading(false);
-    }
-  }, [canModerate, filtersApplied]);
-
-  useEffect(() => {
-    loadMarketplace();
-  }, [user.id, loadMarketplace]);
-
-  useEffect(() => {
-    if (!selectedProductId) return;
-    if (!products.some((entry) => entry.id === selectedProductId)) {
-      setSelectedProductId("");
-      setDetailMediaIndex(0);
-    }
-  }, [products, selectedProductId]);
-
-  useEffect(() => {
-    if (!selectedMediaList.length) {
-      setDetailMediaIndex(0);
-      return;
-    }
-    if (detailMediaIndex > selectedMediaList.length - 1) setDetailMediaIndex(0);
-  }, [selectedMediaList, detailMediaIndex]);
-
-  useEffect(() => {
-    setReviewDraft({ rating: 5, reviewText: "" });
-  }, [selectedProductId]);
-
-  useEffect(() => {
-    if (!navRoute?.ts || navRoute.module !== "market") return;
-
-    if (navRoute.meta?.view) {
-      setMarketView(navRoute.meta.view);
-      if (navRoute.meta.view !== "browse") closeProduct();
-    }
-    if (navRoute.action === "sell") {
-      setMarketView("sell");
-      closeProduct();
-    }
-    if (navRoute.action === "orders") {
-      setMarketView("orders");
-      closeProduct();
-    }
-    if (navRoute.entityType === "market_product" && navRoute.entityId) {
-      const target = products.find((entry) => entry.id === navRoute.entityId);
-      if (target) {
-        setMarketView("browse");
-        openProduct(target);
-      }
-    }
-  }, [navRoute, products]);
-
-  function applyFilters() {
-    // Apply current filter draft to trigger fresh product query.
-    setFiltersApplied({ ...filtersDraft });
-  }
-
-  function resetFilters() {
-    setFiltersDraft({ ...EMPTY_FILTERS });
-    setFiltersApplied({ ...EMPTY_FILTERS });
-  }
-
-  function openProduct(product) {
-    setSelectedProductId(product.id);
-    setDetailMediaIndex(0);
-    setPurchaseQuantity(1);
-    setPurchasePaymentMode("card");
-    setPurchasePaymentReference("");
-    setOfferDraft({ amountNaira: "", note: "" });
-  }
-
-  function closeProduct() {
-    setSelectedProductId("");
-    setDetailMediaIndex(0);
-  }
-
-  function switchMarketView(nextView) {
-    setMarketView(nextView);
-    if (nextView !== "browse") closeProduct();
-  }
-
-  function addMediaUrlDraft() {
-    const nextUrl = String(listingForm.mediaUrlDraft || "").trim();
-    if (!nextUrl) return;
-    setListingForm((prev) => ({
-      ...prev,
-      mediaUrls: [...prev.mediaUrls, { id: crypto.randomUUID(), kind: "image", url: nextUrl }],
-      mediaUrlDraft: "",
-    }));
-  }
-
-  async function handleMediaFiles(event) {
-    // Accept multiple images/videos, size-check, then convert to data URLs.
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    try {
-      setBusy(true);
-      const next = [];
-      for (const file of files.slice(0, 12)) {
-        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
-        if (file.size > 8 * 1024 * 1024) continue;
-        const dataUrl = await fileToDataUrl(file);
-        next.push({
-          id: crypto.randomUUID(),
-          kind: mediaKindFromFile(file),
-          url: dataUrl,
-          name: file.name,
-          mimeType: file.type,
-          size: file.size,
-        });
-      }
-      setListingForm((prev) => ({
-        ...prev,
-        mediaUrls: [...prev.mediaUrls, ...next].slice(0, 12),
-      }));
-    } catch (err) {
-      setError(err.message || "Failed to process media files.");
-    } finally {
-      setBusy(false);
-      event.target.value = "";
-    }
-  }
-
-  function removeMedia(itemId) {
-    setListingForm((prev) => ({
-      ...prev,
-      mediaUrls: prev.mediaUrls.filter((entry) => entry.id !== itemId),
-    }));
-  }
-
-  async function createListing() {
-    // Validate listing form, then publish listing to backend.
-    if (!listingForm.title.trim()) return setError("Product title is required.");
-    if (!Number(listingForm.priceNaira)) return setError("Valid price is required.");
-    const isCustomCategory = listingForm.categoryId === OTHER_CATEGORY_VALUE;
-    const customCategoryName = String(listingForm.customCategoryName || "").trim();
-    if (isCustomCategory && !customCategoryName) {
-      return setError("Enter custom category name when 'Others' is selected.");
-    }
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost("/market/products", {
-        title: listingForm.title.trim(),
-        description: listingForm.description.trim() || null,
-        mediaUrls: listingForm.mediaUrls,
-        categoryId:
-          listingForm.categoryId && !isCustomCategory ? listingForm.categoryId : null,
-        customCategoryName: isCustomCategory ? customCategoryName : null,
-        condition: listingForm.condition,
-        priceNaira: Number(listingForm.priceNaira),
-        quantity: Number(listingForm.quantity || 1),
-      });
-      setListingForm({
-        title: "",
-        description: "",
-        categoryId: "",
-        customCategoryName: "",
-        condition: "new",
-        priceNaira: "",
-        quantity: 1,
-        mediaUrls: [],
-        mediaUrlDraft: "",
-      });
-      setNotice("Listing published.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to create listing.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function requestCategory(options = {}) {
-    // Create category request; school flow can auto-approve immediately.
-    const name = String(options.name ?? categoryRequestName).trim();
-    if (!name) return setError("Enter category name.");
-    const listingTypeForRequest = options.listingType || "student";
-    const autoApprove = Boolean(options.autoApprove);
-    try {
-      setBusy(true);
-      setError("");
-      const created = await apiPost("/market/categories/request", {
-        name,
-        listingType: listingTypeForRequest,
-      });
-      if (autoApprove && created?.id) {
-        await apiPost(`/market/categories/${created.id}/approve`, { action: "approve" });
-      }
-      if (options.name !== undefined) {
-        setSellCategoryName("");
-      } else {
-        setCategoryRequestName("");
-      }
-      setNotice(
-        autoApprove
-          ? "Category created and approved."
-          : "Category request submitted for school approval."
-      );
-      await loadMarketplace();
-      if (created?.id) {
-        setListingForm((prev) => ({ ...prev, categoryId: created.id }));
-      }
-    } catch (err) {
-      setError(err.message || "Failed to request category.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function approveCategory(categoryId, action) {
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/categories/${categoryId}/approve`, { action });
-      setNotice(`Category request ${action}d.`);
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to resolve category request.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function placeOrder(productId, quantity = 1, paymentMode = "cash") {
-    // Create purchase order; card checkout clears payment immediately while offline modes keep seller confirmation.
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost("/market/orders", {
-        productId,
-        quantity: Math.max(1, Number(quantity) || 1),
-        paymentMode,
-        buyerPaymentReference:
-          paymentMode === "transfer" || paymentMode === "p2p"
-            ? String(purchasePaymentReference || "").trim() || null
-            : null,
-      });
-      setNotice(
-        paymentMode === "card"
-          ? "Order created. StudyFlow checkout marked payment as cleared. Seller will release the claim code after handoff."
-          : paymentMode === "transfer"
-          ? "Order created. Complete transfer to seller account and wait for seller confirmation."
-          : paymentMode === "p2p"
-          ? "Order created. Complete P2P payment and wait for seller confirmation."
-          : "Order created. Pay cash and ask seller to confirm."
-      );
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to place order.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function releaseClaimCode(orderId) {
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/orders/${orderId}/release-claim-code`, {});
-      setNotice("Claim code released to buyer inbox.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to release claim code.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function sendOffer() {
-    if (!selectedProduct) return;
-    const amount = Number(offerDraft.amountNaira);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return setError("Offer amount must be greater than 0.");
-    }
-    const body = [
-      `[Marketplace Offer] ${selectedProduct.title}`,
-      `Offer Amount: N${Math.round(amount).toLocaleString()}`,
-      `Product ID: ${selectedProduct.id}`,
-      offerDraft.note ? `Note: ${offerDraft.note.trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost("/chat/messages", {
-        recipientId: selectedProduct.sellerUserId,
-        body,
-      });
-      setOfferDraft({ amountNaira: "", note: "" });
-      setNotice("Offer sent to seller inbox.");
-    } catch (err) {
-      setError(err.message || "Failed to send offer.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function sellerConfirmCash(orderId) {
-    // Seller confirms payment received and system generates buyer claim code.
-    try {
-      setBusy(true);
-      setError("");
-      const data = await apiPost(`/market/orders/${orderId}/seller-confirm-cash`, {});
-      setNotice(
-        data?.claimCode
-          ? `Payment confirmed. Claim code ${data.claimCode} was sent to buyer inbox and stays visible on this order until buyer claims.`
-          : "Payment confirmed."
-      );
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to confirm payment.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function buyerClaim(orderId) {
-    // Buyer enters claim code to finalize the order as completed.
-    const claimCode = String(claimCodes[orderId] || "").trim();
-    if (!claimCode) return setError("Enter claim code first.");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/orders/${orderId}/buyer-claim`, { claimCode });
-      setClaimCodes((prev) => ({ ...prev, [orderId]: "" }));
-      setNotice("Order completed.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to claim order.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function raiseDispute(orderId) {
-    const reason = window.prompt("Dispute reason (required):", "Item not delivered as agreed");
-    if (!reason || !String(reason).trim()) return;
-    const details = window.prompt("Additional details (optional):", "");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/orders/${orderId}/disputes`, {
-        reason: String(reason).trim(),
-        details: details ? String(details).trim() : null,
-      });
-      setNotice("Dispute opened.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to open dispute.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resolveDispute(disputeId, status = "Resolved") {
-    const resolutionNote = window.prompt("Resolution note (optional):", "");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/disputes/${disputeId}/resolve`, {
-        status,
-        resolutionNote: resolutionNote ? String(resolutionNote).trim() : null,
-      });
-      setNotice(`Dispute ${status.toLowerCase()}.`);
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to resolve dispute.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setSellerVerification(userId, verify) {
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/users/${userId}/verify`, { verify });
-      setNotice(verify ? "Seller verified." : "Seller verification removed.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to update seller verification.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reportProduct(productId) {
-    const reason = window.prompt("Report reason (required):", "Inappropriate listing");
-    if (!reason || !String(reason).trim()) return;
-    const details = window.prompt("Additional details (optional):", "");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/products/${productId}/report`, {
-        reason: String(reason).trim(),
-        details: details ? String(details).trim() : null,
-      });
-      setNotice("Report submitted.");
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to report listing.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function reviewProduct(productId) {
-    // Save star rating + optional review text.
-    const rating = Math.max(1, Math.min(5, Number(reviewDraft.rating) || 0));
-    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-      return setError("Choose a star rating between 1 and 5.");
-    }
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/products/${productId}/reviews`, {
-        rating,
-        reviewText: reviewDraft.reviewText.trim() || null,
-      });
-      setNotice("Review saved.");
-      setReviewDraft({ rating: 5, reviewText: "" });
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to submit review.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function moderateProduct(productId, action) {
-    const reason = window.prompt("Moderation reason (optional):", "");
-    try {
-      setBusy(true);
-      setError("");
-      await apiPost(`/market/products/${productId}/moderate`, {
-        action,
-        reason: reason ? String(reason).trim() : null,
-      });
-      setNotice(`Listing ${action} action completed.`);
-      await loadMarketplace();
-    } catch (err) {
-      setError(err.message || "Failed to moderate listing.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const {
+    activeOrders,
+    addMediaUrlDraft,
+    applyFilters,
+    approveCategory,
+    busy,
+    buyerClaim,
+    canModerate,
+    canResolveDisputes,
+    canSell,
+    categoryRequestName,
+    categoryRequests,
+    claimCodes,
+    closeProduct,
+    completedOrders,
+    createListing,
+    detailMediaIndex,
+    disputes,
+    error,
+    filterLgaOptions,
+    filterStateOptions,
+    filtersDraft,
+    handleMediaFiles,
+    listingForm,
+    listingType,
+    loading,
+    marketHighlights,
+    marketView,
+    moderateProduct,
+    notice,
+    offerDraft,
+    openProduct,
+    placeOrder,
+    productCategories,
+    products,
+    purchasePaymentMode,
+    purchasePaymentReference,
+    purchaseQuantity,
+    raiseDispute,
+    releaseClaimCode,
+    removeMedia,
+    reportProduct,
+    requestCategory,
+    resetFilters,
+    resolveDispute,
+    reviewDraft,
+    reviewProduct,
+    selectedMedia,
+    selectedMediaList,
+    selectedProduct,
+    sellCategoryName,
+    sellerConfirmCash,
+    sendOffer,
+    setCategoryRequestName,
+    setDetailMediaIndex,
+    setFiltersDraft,
+    setListingForm,
+    setNotice,
+    setOfferDraft,
+    setPurchasePaymentMode,
+    setPurchasePaymentReference,
+    setPurchaseQuantity,
+    setReviewDraft,
+    setSellCategoryName,
+    setSellerVerification,
+    switchMarketView,
+    updateClaimCode,
+  } = useMarketplaceWorkspace({ user, navRoute });
 
   if (loading) {
     return (
@@ -1288,9 +689,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                         style={{ width: "120px" }}
                         placeholder="Claim code"
                         value={claimCodes[order.id] || ""}
-                        onChange={(event) =>
-                          setClaimCodes((prev) => ({ ...prev, [order.id]: event.target.value }))
-                        }
+                        onChange={(event) => updateClaimCode(order.id, event.target.value)}
                       />
                       <button
                         className="btn btn-purple btn-sm"

@@ -1,6 +1,6 @@
 # StudyFlow Implementation Workflow
 
-Last updated: March 7, 2026
+Last updated: March 19, 2026
 
 ## 1. Delivery Method Used
 
@@ -22,13 +22,16 @@ This approach enabled fast iteration from core task management into collaboratio
 - role-based rendering:
   - `StudentApp`
   - `SchoolDashboard` (used by school/state/federal with scope-aware behavior)
+- workspace orchestration is being moved into dedicated hooks such as `useStudentWorkspace`, `useSchoolWorkspace`, `useCoursesWorkspace`, `useFeesWorkspace`, `useMarketplaceWorkspace`, and `useCollaborationHub`
+- large task surfaces are being moved into dedicated workspace components instead of staying inside page files
 - shared UI components for tasks, collaboration hub, fees, marketplace, notifications
 
 ### Backend
 
-- Express API split into two service files:
-  - `server/index.js`: auth, profile, tasks, analytics, chat, meetings, notifications, action items
-  - `server/commerceFeed.js`: fees, marketplace, community feed
+- Express API now boots through `server/app.js` and mounts dedicated route domains for identity, learning, collaboration, communications, governance, parents, commerce, and community
+- `server/domains/commerce/` now owns the commerce route families (`feesRoutes`, `marketplaceRoutes`) plus bootstrap helpers
+- `server/domains/community/` now owns feed/audience/community route registration
+- `server/commerceFeed.js` now acts as a shared helper/mapping library for commerce/community instead of a multi-thousand-line route controller
 - PostgreSQL persistence via `sf_*` domain tables
 - auth middleware + role/scope checks on every sensitive route
 
@@ -94,9 +97,10 @@ When a change request arrives, this sequence is followed:
 3. update frontend forms/views/actions
 4. update schema bootstrap/migration blocks where needed
 5. run `npm run build` and `npm run lint` on frontend
-6. run syntax checks on backend files
-7. validate key paths manually by role
-8. document changes and residual gaps
+6. run backend route/integration tests through `npm test`
+7. run syntax checks and smoke validation on backend files
+8. validate key paths manually or through role-aware route suites
+9. document changes and residual gaps
 
 ## 5. Quality and Stability Controls
 
@@ -116,7 +120,8 @@ When a change request arrives, this sequence is followed:
 ## 7. Current Engineering Baseline
 
 - frontend build and lint are green
-- backend syntax checks are green
+- backend route modules and syntax checks are green
+- auth, parent, task, fees, marketplace, community, and analytics route suites are green in the shared Node test runner
 - core flows are integrated end-to-end across roles
 - documentation trail now exists for onboarding contributors and stakeholders
 
@@ -168,8 +173,19 @@ The current implementation cycle follows this strict order:
 
 ## 9. Next Approved Plan (Execution Queue)
 
+The March 6-7 implementation cycle is complete.
+
+The next approved execution order is now:
+
 1. external AI provider integration for higher-quality transcript + summary outputs
 2. production-grade real-time call hardening and reliability controls
 3. real payment rail integration for fees and transaction reconciliation
 4. wallet/escrow foundation for marketplace negotiation and auction flows
-5. governance intelligence expansion (alerts, trend analytics, intervention signals)
+5. media-rich social/community expansion:
+   channels, threads, moderation depth, and photo/video upload support
+6. governance intelligence expansion:
+   alerts, trend analytics, intervention signals, and drill-down reporting
+
+Detailed Phase 0 work breakdown now lives in:
+
+- `docs/06_PHASE0_EXECUTION_PLAN.md`

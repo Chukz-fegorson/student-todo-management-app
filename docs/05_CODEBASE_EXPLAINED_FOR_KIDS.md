@@ -1,6 +1,6 @@
 # StudyFlow Codebase Explained (Like You Are 5)
 
-Last updated: March 6, 2026
+Last updated: March 19, 2026
 
 ## 1. Big Picture
 
@@ -41,13 +41,14 @@ This is the student home classroom.
 
 It has tabs:
 - My Tasks
+- Courses
 - Collab Hub
 - My Fees
 - Marketplace
 
 It also:
-- loads student tasks
-- checks reminders every 30 seconds
+- uses a helper hook to load student data and manage reminders
+- uses a task workspace component to show the task board, deadlines, and support views
 - allows task create/edit/delete
 
 ## 2.4 `src/pages/SchoolDashboard.jsx`
@@ -55,10 +56,10 @@ It also:
 This is the teacher/school/governance control room.
 
 It:
-- loads students, tasks, schools, analytics
+- uses a helper hook to load students, tasks, schools, analytics, and scorecards
+- uses a task workspace component for assigning, filtering, reviewing, and grading
 - lets role users assign tasks to many students
-- lets role users review and grade
-- switches between Tasks/Collab/Fees/Marketplace tabs
+- switches between Tasks/Courses/Collab/Fees/Marketplace tabs
 
 ## 2.5 `src/components/CollaborationHubModal.jsx`
 
@@ -71,6 +72,7 @@ It includes:
 - transcript and summary
 - action items
 - community feed panel
+- uses a helper hook to manage people lists, chat refresh, meeting state, live transcript, summary sync, and follow-up actions
 
 Meeting flow:
 1. create/open meeting
@@ -80,7 +82,27 @@ Meeting flow:
 5. accept todos
 6. sync todos to action list/tasks/calendar
 
-## 2.6 `src/components/MarketplaceWorkspace.jsx`
+## 2.6 `src/components/CoursesWorkspace.jsx`
+
+This is the learning delivery room.
+
+It:
+- shows course cards and CGPA progress
+- lets schools/governance users create courses, modules, assessments, and bundles
+- lets students unlock courses and attempt assessments
+- uses a helper hook to manage course data loading, enrollment flow, payment draft state, and assessment actions
+
+## 2.7 `src/components/FeesWorkspace.jsx`
+
+This is the school cashier room.
+
+It:
+- shows available fee plans and generated invoices
+- lets students upload payment proof and download invoices/receipts
+- lets schools confirm payments and issue school receipt notes
+- uses a helper hook plus shared fee helpers to manage invoice state, payment drafts, and confirmation queues
+
+## 2.8 `src/components/MarketplaceWorkspace.jsx`
 
 This is the mini shop.
 
@@ -96,8 +118,9 @@ Important pieces:
 - school category add flow
 - claim-code order completion flow
 - 5-star review UI
+- helper hook manages catalog filters, listing drafts, orders, disputes, and moderation actions
 
-## 2.7 `src/components/CommunityFeedPanel.jsx`
+## 2.9 `src/components/CommunityFeedPanel.jsx`
 
 This is the school social wall.
 
@@ -108,7 +131,7 @@ Users can:
 
 Scope rules decide who can see which posts.
 
-## 2.8 `src/components/AccountModal.jsx`
+## 2.10 `src/components/AccountModal.jsx`
 
 This is profile settings.
 
@@ -119,7 +142,7 @@ Users can update:
 - avatar
 - password
 
-## 2.9 `src/lib/meetingAi.js`
+## 2.11 `src/lib/meetingAi.js`
 
 This is the local helper brain.
 
@@ -131,30 +154,49 @@ It:
 
 ## 3. Backend Rooms (Main Files)
 
-## 3.1 `server/index.js`
+## 3.1 `server/app.js`
 
 This is the main backend principal office.
 
 It handles:
-- auth (register/login/reset)
-- profile (`/me`)
-- tasks + grading
-- students/schools directory
-- meetings + notes + calendar files
-- chat
-- notifications
-- analytics
+- building the Express app
+- connecting the big backend rooms together
+- mounting auth, tasks, courses, collaboration, parents, analytics, commerce, and community routes
+- starting the health checks and startup bootstrap work
 
-## 3.2 `server/commerceFeed.js`
+## 3.2 `server/domains/commerce/`
 
-This is commerce + social backend office.
+This is the school shop office.
 
 It handles:
 - fees plans/invoices/payments
 - marketplace categories/listings/orders/reviews/moderation
-- community feed posts/comments/reactions
+- startup bootstrap for commerce tables and seed categories
 
-It also enforces role scope checks so users only do what they are allowed to do.
+Important files:
+- `server/domains/commerce/feesRoutes.js`
+- `server/domains/commerce/marketplaceRoutes.js`
+- `server/domains/commerce/bootstrap.js`
+
+## 3.3 `server/domains/community/routes.js`
+
+This is the school social wall office.
+
+It handles:
+- audience lookup
+- feed posts
+- comments
+- reactions
+
+## 3.4 `server/commerceFeed.js`
+
+This is now the shared helper toolbox for commerce + community.
+
+It stores:
+- mapper helpers
+- normalization helpers
+- scope helpers
+- reusable fetch helpers used by the commerce/community route files
 
 ## 4. How Frontend and Backend Talk
 
@@ -195,7 +237,9 @@ Read in this order:
 3. `src/pages/StudentApp.jsx`
 4. `src/pages/SchoolDashboard.jsx`
 5. `src/components/CollaborationHubModal.jsx`
-6. `src/components/MarketplaceWorkspace.jsx`
-7. `server/index.js`
-8. `server/commerceFeed.js`
-
+6. `src/components/FeesWorkspace.jsx`
+7. `src/components/MarketplaceWorkspace.jsx`
+8. `server/app.js`
+9. `server/domains/commerce/feesRoutes.js`
+10. `server/domains/commerce/marketplaceRoutes.js`
+11. `server/domains/community/routes.js`

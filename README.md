@@ -77,6 +77,14 @@ If PowerShell blocks `npm`, use `npm.cmd run dev` instead.
 5. Start the backend from project root: `npm run backend`
 6. If you want auto-restart while editing backend files, run `npm run backend:watch`
 
+Optional external AI summary provider:
+- `AI_PROVIDER_MODE=openai_compatible`
+- `AI_API_KEY=...`
+- `AI_API_BASE_URL=https://api.openai.com/v1`
+- `AI_CHAT_COMPLETIONS_PATH=/chat/completions`
+- `AI_MODEL=...`
+- `AI_TIMEOUT_MS=35000`
+
 Backend runs at `http://localhost:4000`.
 
 ### 3) Frontend only
@@ -104,11 +112,13 @@ Frontend defaults to `http://localhost:5173`.
 - `GET /fees/plans`
 - `POST /market/orders`
 - `GET /feed/posts`
+- `POST /ai/meeting-summary`
 
 ## Notes
 
 - Backend auto-creates `sf_*` tables on startup.
 - `server/app.js` now mounts commerce and community through dedicated domain route modules instead of one monolithic backend controller.
+- Meeting summaries can now use an optional external AI provider via backend env settings, with the existing local summarizer kept as fallback.
 - `server/.env` is ignored by git via `server/.gitignore`.
 - Privileged role signups (`school`, `state`, `federal`) require configured signup keys.
 - Login/register endpoints use lightweight rate limiting (`AUTH_RATE_WINDOW_MS`, `AUTH_RATE_MAX_ATTEMPTS`).

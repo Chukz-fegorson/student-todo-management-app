@@ -66,6 +66,7 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-046 | Phase 0 | Move collaboration hub orchestration into shared frontend helpers and a dedicated hook | Implemented | `CollaborationHubModal` now renders the collaboration UI while `src/lib/collaboration.js` owns reusable collab helpers and `useCollaborationHub` owns chat, meetings, transcript, AI summary, action-item sync, and navigation reactions |
 | CR-047 | Phase 0 | Split backend commerce and community routes into dedicated domain modules | Implemented | `server/app.js` now mounts `server/domains/commerce` and `server/domains/community`; fees, marketplace, feed, and schema bootstrap no longer depend on one multi-thousand-line backend controller |
 | CR-048 | Phase 0 | Add route-level integration coverage for the Phase 0 backend flows | Implemented | Node HTTP integration suites now cover auth, parent, task, fees, marketplace, community, and analytics boundaries through dedicated route-module tests in `tests/` |
+| CR-049 | Post-Phase-0 | Add optional external AI provider support for meeting summaries while keeping the zero-cost fallback | Implemented | Collaboration summary generation can now call `/ai/meeting-summary` through backend env-driven provider settings, and the frontend falls back to `src/lib/meetingAi.js` whenever the external provider is unavailable |
 
 ## 4. Key Technical Change Highlights
 

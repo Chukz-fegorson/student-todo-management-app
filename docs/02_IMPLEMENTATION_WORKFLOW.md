@@ -38,8 +38,9 @@ This approach enabled fast iteration from core task management into collaboratio
 ### AI and Transcript Layer (Current)
 
 - transcript capture: browser speech recognition (when supported)
-- summary/todo/action extraction: local deterministic NLP utility (`src/lib/meetingAi.js`)
-- no paid external AI dependency required in current state
+- summary/todo/action extraction: backend can now call an optional openai-compatible provider, while `src/lib/meetingAi.js` remains the local deterministic fallback
+- provider configuration now lives in backend env settings so API keys stay off the client
+- no paid external AI dependency is required for local development because the fallback path remains available
 
 ## 3. Module-by-Module Build Workflow
 
@@ -108,6 +109,7 @@ When a change request arrives, this sequence is followed:
 - scope checks (school/state/federal boundaries)
 - normalized validation at request edges
 - resilient fallback logic for media and transcript processing
+- graceful fallback from external AI summary generation to the local deterministic summarizer
 - compatibility-first UX changes (new module behavior without breaking prior core flows)
 
 ## 6. Implementation Principles Used

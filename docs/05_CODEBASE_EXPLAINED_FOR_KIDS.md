@@ -72,7 +72,7 @@ It includes:
 - transcript and summary
 - action items
 - community feed panel
-- uses a helper hook to manage people lists, chat refresh, meeting state, live transcript, summary sync, and follow-up actions
+- uses a helper hook to manage people lists, chat refresh, meeting state, live transcript, summary sync, optional external AI summary requests, and follow-up actions
 
 Meeting flow:
 1. create/open meeting
@@ -163,6 +163,8 @@ It handles:
 - connecting the big backend rooms together
 - mounting auth, tasks, courses, collaboration, parents, analytics, commerce, and community routes
 - starting the health checks and startup bootstrap work
+
+It also wires optional external AI summary settings into the collaboration backend.
 
 ## 3.2 `server/domains/commerce/`
 

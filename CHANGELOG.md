@@ -4,6 +4,18 @@ All notable changes to StudyFlow are documented here.
 
 This release log complements the deeper engineering trail in `docs/03_CHANGE_REQUEST_LOG.md`.
 
+## [Unreleased]
+
+### Added
+
+- optional server-backed external AI summary integration for meeting transcripts through `/ai/meeting-summary`
+- environment-based provider configuration for openai-compatible summary providers
+- collaboration route and provider tests covering the new AI summary path
+
+### Changed
+
+- collaboration summary generation now prefers the external provider when configured and falls back to the local deterministic summarizer when unavailable
+
 ## [2.0.0] - 2026-03-19
 
 ### Added

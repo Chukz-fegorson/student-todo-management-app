@@ -18,6 +18,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 
 - Student kanban board: `Todo`, `In Progress`, `Submitted`, `Done`
 - Courses workspace with CGPA overview, assessment tracking, and course deadlines
+- Fees workspace with manual receipt confirmation plus optional provider-backed online checkout
 - Learning Summary required for submitted tasks
 - Grade + feedback workflow with grade-weighted progress
 - Multi-student task assignment for governance roles
@@ -83,7 +84,22 @@ Optional external AI summary provider:
 - `AI_API_BASE_URL=https://api.openai.com/v1`
 - `AI_CHAT_COMPLETIONS_PATH=/chat/completions`
 - `AI_MODEL=...`
+- `AI_AUDIO_TRANSCRIPTIONS_PATH=/audio/transcriptions`
+- `AI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe`
 - `AI_TIMEOUT_MS=35000`
+
+Optional online fee checkout provider:
+- `PAYMENT_PROVIDER_MODE=paystack`
+- `PAYSTACK_SECRET_KEY=...`
+- `PAYSTACK_PUBLIC_KEY=...`
+- `PAYSTACK_BASE_URL=https://api.paystack.co`
+- `PAYSTACK_CALLBACK_URL=http://localhost:5173/?module=fees`
+- `PAYSTACK_CHANNELS=card,bank,ussd,bank_transfer`
+- `PAYMENT_PROVIDER_TIMEOUT_MS=35000`
+
+If you enable Paystack, point the Paystack webhook URL at:
+- `POST /fees/payment-provider/webhook`
+- Example local target after tunneling/public exposure: `https://your-domain-or-tunnel.example/fees/payment-provider/webhook`
 
 Backend runs at `http://localhost:4000`.
 
@@ -110,15 +126,34 @@ Frontend defaults to `http://localhost:5173`.
 - `POST /tasks/:id/grade`
 - `GET /analytics/overview`
 - `GET /fees/plans`
+- `GET /fees/payment-provider/status`
+- `POST /fees/invoices/:id/mark-paid`
+- `POST /fees/invoices/:id/checkout`
+- `POST /fees/payments/:id/confirm`
+- `POST /fees/payments/:id/reconcile`
+- `POST /fees/payment-provider/webhook`
 - `POST /market/orders`
 - `GET /feed/posts`
 - `POST /ai/meeting-summary`
+- `GET /ai/meeting-summary/status`
+- `POST /ai/meeting-transcript`
+- `POST /ai/meeting-transcript/jobs`
+- `GET /ai/meeting-transcript/jobs/:id`
 
 ## Notes
 
 - Backend auto-creates `sf_*` tables on startup.
 - `server/app.js` now mounts commerce and community through dedicated domain route modules instead of one monolithic backend controller.
 - Meeting summaries can now use an optional external AI provider via backend env settings, with the existing local summarizer kept as fallback.
+- Collaboration meeting notes now show both the configured AI engine status and whether the latest summary came from the external provider or the local fallback.
+- In-progress collaboration meeting drafts now recover after refresh/offline interruptions, with call-health indicators for network, transcript readiness, server sync, and local draft protection.
+- If the backend AI provider is configured, uploaded meeting audio/video can now be transcribed through `/ai/meeting-transcript`, and AI-extracted meeting tasks can be edited before they are synced into action items or the student kanban.
+- If the fee payment provider is configured, `on_platform` invoice payments now open a real online checkout flow, keep provider refs/status in payment history, and only mark invoices paid after server-side reconciliation.
+- If the provider also sends a signed success webhook to `/fees/payment-provider/webhook`, StudyFlow now auto-confirms the matching online fee payment and keeps manual verification as a fallback if webhook delivery is delayed.
+- Manual `transfer` and `cash` fee submissions now show when receipt evidence is ready, treat a pasted receipt URL as valid proof during submit, and work best with up to 3 images or short videos under 3MB each in the current secure upload flow.
+- Collaboration calls now include device/link preflight checks plus explicit embedded/window rejoin actions so interrupted meetings can recover faster without dropping the current draft.
+- Large meeting-media transcription now runs through async backend jobs, and the collaboration workspace polls those jobs so completed transcripts can automatically refresh the saved summary and suggested tasks.
+- Meeting summaries now keep AI task review history, so accepted, rejected, edited, and synced suggestions are still visible when the same meeting is reopened later.
 - `server/.env` is ignored by git via `server/.gitignore`.
 - Privileged role signups (`school`, `state`, `federal`) require configured signup keys.
 - Login/register endpoints use lightweight rate limiting (`AUTH_RATE_WINDOW_MS`, `AUTH_RATE_MAX_ATTEMPTS`).

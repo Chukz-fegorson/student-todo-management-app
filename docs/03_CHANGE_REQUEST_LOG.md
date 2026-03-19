@@ -1,6 +1,6 @@
 # StudyFlow Change Request Log
 
-Last updated: March 19, 2026
+Last updated: March 20, 2026
 
 ## 1. Purpose
 
@@ -67,6 +67,14 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-047 | Phase 0 | Split backend commerce and community routes into dedicated domain modules | Implemented | `server/app.js` now mounts `server/domains/commerce` and `server/domains/community`; fees, marketplace, feed, and schema bootstrap no longer depend on one multi-thousand-line backend controller |
 | CR-048 | Phase 0 | Add route-level integration coverage for the Phase 0 backend flows | Implemented | Node HTTP integration suites now cover auth, parent, task, fees, marketplace, community, and analytics boundaries through dedicated route-module tests in `tests/` |
 | CR-049 | Post-Phase-0 | Add optional external AI provider support for meeting summaries while keeping the zero-cost fallback | Implemented | Collaboration summary generation can now call `/ai/meeting-summary` through backend env-driven provider settings, and the frontend falls back to `src/lib/meetingAi.js` whenever the external provider is unavailable |
+| CR-050 | Post-Phase-0 | Surface AI summary provider diagnostics in the collaboration UI and send richer meeting context to the provider | Implemented | Collaboration now exposes `/ai/meeting-summary/status`, shows configured-vs-latest summary source in the meeting notes UI, and includes schedule/participant/transcript metadata when requesting external summaries |
+| CR-051 | Post-Phase-0 | Harden real-time meeting reliability with local draft recovery and call-health signals | Implemented | Collaboration now snapshots in-progress meeting drafts into browser storage, restores recoverable notes after refresh/interruption, warns on unload, checkpoints active call notes back to the server, and shows network/transcript/sync/draft protection health inside the meeting workspace |
+| CR-052 | Post-Phase-0 | Add optional OpenAI-backed meeting media transcription and editable AI task suggestions before sync | Implemented | Collaboration can now transcribe uploaded audio/video through `/ai/meeting-transcript` when the backend provider is configured, and AI-generated meeting actions become editable task drafts before users move selected items into action lists or the student task board |
+| CR-053 | Post-Phase-0 | Harden live meeting sessions with device/link preflight checks and explicit rejoin controls | Implemented | Collaboration now checks join-link readiness, connection state, microphone/camera detection, and transcript support before calls, then lets users refresh the embedded call frame or open a fresh rejoin window when a Jitsi session is interrupted |
+| CR-054 | Post-Phase-0 | Move meeting-media transcription onto async jobs with auto-refreshing summary suggestions | Implemented | Collaboration now queues transcription work through `/ai/meeting-transcript/jobs`, polls job status from the meeting workspace, restores in-flight job polling from recovered drafts, and automatically refreshes transcript-backed summary suggestions when the transcript result lands |
+| CR-055 | Post-Phase-0 | Persist AI task review history inside each meeting record | Implemented | Collaboration now saves accepted, rejected, pending, edited, and synced task-review decisions with the meeting summary so reopening the same meeting restores review history instead of starting from a blank suggestion state |
+| CR-056 | Post-Phase-0 | Replace simulated on-platform fee payment with provider-backed checkout and reconciliation | Implemented | Fees now expose provider status plus checkout/reconcile endpoints, keep manual transfer/cash confirmation unchanged, store provider refs/status in `sf_fee_payments`, let students resume/verify online fee payments before invoices are marked paid, and auto-confirm matching signed provider webhooks |
+| CR-057 | Post-Phase-0 | Stabilize manual fee payment proof submission and school confirmation visibility | Implemented | The student fee card now shows receipt-readiness before submit, auto-includes a pasted receipt URL during manual submission, aligns file guidance with the secure JSON upload limits, and the transfer/cash proof flow now has dedicated end-to-end route coverage through school confirmation |
 
 ## 4. Key Technical Change Highlights
 
@@ -76,6 +84,7 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 - commerce and feed modules were developed with moderation and auditability in mind
 - Phase 0 frontend hardening is now active in production code through layered CSS plus dedicated student, school, course, fees, marketplace, and collaboration workspace seams
 - Phase 0 backend hardening is now active in production code through modular commerce/community route families and route-level integration coverage for the required high-value flows
+- post-Phase-0 payment hardening is now active in production code through provider-backed fee checkout, reconciliation metadata, and route-level lifecycle coverage
 
 ## 5. Audit Note
 

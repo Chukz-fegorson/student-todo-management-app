@@ -27,7 +27,14 @@ export function createStaticAuth(user) {
 
 export function createTestApp() {
   const app = express();
-  app.use(express.json({ limit: "4mb" }));
+  app.use(
+    express.json({
+      limit: "4mb",
+      verify(req, _res, buffer) {
+        req.rawBody = buffer?.length ? buffer.toString("utf8") : "";
+      },
+    })
+  );
   return app;
 }
 

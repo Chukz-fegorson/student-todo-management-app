@@ -273,6 +273,110 @@
   gap: 0.6rem;
 }
 
+.collab-summary-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  padding: 0.75rem;
+}
+
+.collab-summary-status-copy strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--purple);
+  font-size: 0.8rem;
+}
+
+.collab-summary-status-copy p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.collab-summary-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.summary-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.summary-provider-pill.ready {
+  background: rgba(62, 207, 142, 0.14);
+  border-color: rgba(62, 207, 142, 0.32);
+  color: var(--green);
+}
+
+.summary-provider-pill.fallback {
+  background: rgba(246, 185, 59, 0.14);
+  border-color: rgba(246, 185, 59, 0.32);
+  color: var(--amber);
+}
+
+.summary-provider-pill.danger {
+  background: rgba(232, 64, 64, 0.14);
+  border-color: rgba(232, 64, 64, 0.32);
+  color: var(--red);
+}
+
+.collab-summary-meta {
+  margin-top: 0.35rem !important;
+  color: var(--muted) !important;
+}
+
+.collab-summary-warning {
+  margin-top: 0.35rem !important;
+  color: var(--amber) !important;
+}
+
+.collab-health-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0.45rem;
+}
+
+.collab-health-note {
+  margin-bottom: 0.65rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.collab-health-note-alert {
+  color: var(--amber);
+}
+
+.collab-transcript-job {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin: 0 0 0.75rem;
+}
+
+.collab-transcript-job .collab-health-note {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .collab-call-wrap {
   margin-top: 0.7rem;
   border: 1px solid var(--border);
@@ -351,6 +455,13 @@
   padding: 0.5rem;
 }
 
+.collab-suggest-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(79, 142, 247, 0.06);
+  padding: 0.65rem;
+}
+
 .collab-suggest-item {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -359,6 +470,22 @@
   font-size: 0.8rem;
   color: var(--text);
   line-height: 1.4;
+}
+
+.collab-suggest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.45rem 0 0.6rem;
+}
+
+.collab-suggest-meta span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  background: var(--surface);
 }
 
 .summary-section p {
@@ -397,6 +524,14 @@
 
   .collab-call-frame {
     min-height: 260px;
+  }
+
+  .collab-summary-status {
+    grid-template-columns: 1fr;
+  }
+
+  .collab-summary-status-actions {
+    justify-content: flex-start;
   }
 }
 

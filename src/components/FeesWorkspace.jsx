@@ -399,10 +399,15 @@ export default function FeesWorkspace({ user, navRoute }) {
     loading,
     markInvoicePaid,
     notice,
+    onlineCheckoutReady,
+    openCheckoutWindow,
     paidInvoiceByPlanId,
+    paymentProviderStatus,
     pendingPayments,
+    pendingCheckoutPayments,
     planForm,
     plans,
+    reconcilePayment,
     recentPayments,
     removeReceiptMedia,
     schoolReceiptNotes,
@@ -453,6 +458,13 @@ export default function FeesWorkspace({ user, navRoute }) {
             </span>
             <span className="module-highlight-pill">
               {canManageFees ? `${students.length} student${students.length === 1 ? "" : "s"} in fee scope` : `${confirmedPayments.length} confirmed payment${confirmedPayments.length === 1 ? "" : "s"}`}
+            </span>
+            <span className="module-highlight-pill">
+              {isStudent
+                ? onlineCheckoutReady
+                  ? `Online checkout ready${paymentProviderStatus?.provider ? ` (${paymentProviderStatus.provider})` : ""}`
+                  : "Manual receipt flow active"
+                : `${pendingCheckoutPayments.length} online checkout${pendingCheckoutPayments.length === 1 ? "" : "s"} in progress`}
             </span>
           </div>
         </div>
@@ -715,7 +727,35 @@ export default function FeesWorkspace({ user, navRoute }) {
             : "Monitor generated invoices across students, download the same invoice the student sees, and keep payment progress visible."}
         </div>
         <div className="calendar-list">
-          {invoices.map((invoice) => (
+          {invoices.map((invoice) => {
+            const paymentDraft = getPaymentDraft(invoice);
+            const isOnlineDraft = paymentDraft.paymentMethod === "on_platform";
+            const hasCheckout = Boolean(paymentDraft.checkoutPaymentId);
+            const hasInlineReceiptUrl = Boolean(
+              String(paymentDraft.receiptUrlDraft || "").trim()
+            );
+            const canQueueInlineReceiptUrl = paymentDraft.receiptMedia.length < 8;
+            const hasQueuedInlineReceiptUrl =
+              hasInlineReceiptUrl && canQueueInlineReceiptUrl;
+            const receiptEvidenceCount =
+              paymentDraft.receiptMedia.length + (hasQueuedInlineReceiptUrl ? 1 : 0);
+            const manualPaymentReady = Boolean(
+              String(paymentDraft.paidForLabel || "").trim() && receiptEvidenceCount
+            );
+            const submitButtonDisabled = isOnlineDraft
+              ? busy || (!onlineCheckoutReady && !hasCheckout)
+              : busy || !manualPaymentReady;
+            const submitButtonTitle = isOnlineDraft
+              ? !onlineCheckoutReady && !hasCheckout
+                ? "Online checkout is not configured for this workspace yet."
+                : "Start or refresh the online checkout."
+              : !String(paymentDraft.paidForLabel || "").trim()
+              ? "Add what this payment covers before submitting."
+              : !receiptEvidenceCount
+              ? "Add at least one receipt file or receipt URL before submitting."
+              : "Submit payment evidence for school confirmation.";
+
+            return (
             <div key={invoice.id} id={`fee-invoice-${invoice.id}`} className="review-card">
               <div className="review-card-header">
                 <div>
@@ -764,19 +804,19 @@ export default function FeesWorkspace({ user, navRoute }) {
               </div>
               {isStudent && invoice.status === "Unpaid" && (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>
-                  {!getPaymentDraft(invoice).open ? (
+                  {!paymentDraft.open ? (
                     <button
                       className="btn btn-primary btn-sm"
                       type="button"
                       onClick={() => updatePaymentDraft(invoice.id, { open: true })}
                     >
-                      Pay Fees
+                      {hasCheckout ? "Resume Payment" : "Pay Fees"}
                     </button>
                   ) : (
                     <>
                       <input
                         placeholder="Paid for (e.g. Tuition, Exam fee, Hostel)"
-                        value={getPaymentDraft(invoice).paidForLabel}
+                        value={paymentDraft.paidForLabel}
                         onChange={(event) =>
                           updatePaymentDraft(invoice.id, {
                             paidForLabel: event.target.value,
@@ -791,7 +831,7 @@ export default function FeesWorkspace({ user, navRoute }) {
                         }}
                       >
                         <select
-                          value={getPaymentDraft(invoice).paymentMethod}
+                          value={paymentDraft.paymentMethod}
                           onChange={(event) =>
                             updatePaymentDraft(invoice.id, {
                               paymentMethod: event.target.value,
@@ -800,11 +840,18 @@ export default function FeesWorkspace({ user, navRoute }) {
                         >
                           <option value="transfer">Transfer</option>
                           <option value="cash">Cash</option>
-                          <option value="on_platform">On-platform (simulated)</option>
+                          <option value="on_platform">
+                            Online checkout{paymentProviderStatus?.provider ? ` (${paymentProviderStatus.provider})` : ""}
+                          </option>
                         </select>
                         <input
-                          placeholder="Transaction Ref (optional)"
-                          value={getPaymentDraft(invoice).transactionReference}
+                          disabled={isOnlineDraft}
+                          placeholder={
+                            isOnlineDraft
+                              ? "Provider reference will appear here"
+                              : "Transaction Ref (optional)"
+                          }
+                          value={paymentDraft.transactionReference}
                           onChange={(event) =>
                             updatePaymentDraft(invoice.id, {
                               transactionReference: event.target.value,
@@ -814,12 +861,12 @@ export default function FeesWorkspace({ user, navRoute }) {
                       </div>
                       <textarea
                         placeholder="Optional notes for school cashier..."
-                        value={getPaymentDraft(invoice).notes}
+                        value={paymentDraft.notes}
                         onChange={(event) =>
                           updatePaymentDraft(invoice.id, { notes: event.target.value })
                         }
                       />
-                      {getPaymentDraft(invoice).paymentMethod !== "on_platform" && (
+                      {!isOnlineDraft && (
                         <>
                           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                             <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer" }}>
@@ -835,7 +882,7 @@ export default function FeesWorkspace({ user, navRoute }) {
                             <input
                               style={{ flex: 1, minWidth: "220px" }}
                               placeholder="Or paste receipt URL"
-                              value={getPaymentDraft(invoice).receiptUrlDraft}
+                              value={paymentDraft.receiptUrlDraft}
                               onChange={(event) =>
                                 updatePaymentDraft(invoice.id, {
                                   receiptUrlDraft: event.target.value,
@@ -850,9 +897,19 @@ export default function FeesWorkspace({ user, navRoute }) {
                               Add URL
                             </button>
                           </div>
-                          {!!getPaymentDraft(invoice).receiptMedia.length && (
+                          <div className="panel-hint">
+                            {!canQueueInlineReceiptUrl && hasInlineReceiptUrl
+                              ? "Receipt list is full. Remove one attached item before sending the pasted URL."
+                              : receiptEvidenceCount
+                              ? `${receiptEvidenceCount} receipt item${receiptEvidenceCount === 1 ? "" : "s"} ready for submission.${hasInlineReceiptUrl ? " The pasted URL will be sent even if you skip the Add URL button." : ""}`
+                              : "Add at least one receipt file or paste a receipt URL to enable payment submission."}
+                          </div>
+                          <div className="panel-hint">
+                            Use up to 3 images or short videos under 3MB each for the current secure upload flow.
+                          </div>
+                          {!!paymentDraft.receiptMedia.length && (
                             <div className="market-media-grid">
-                              {getPaymentDraft(invoice).receiptMedia.map((entry) => (
+                              {paymentDraft.receiptMedia.map((entry) => (
                                 <div key={entry.id} className="market-media-item">
                                   {String(entry.kind || "").toLowerCase() === "video" ? (
                                     <video src={entry.url} controls preload="metadata" />
@@ -872,18 +929,70 @@ export default function FeesWorkspace({ user, navRoute }) {
                           )}
                         </>
                       )}
-                      {getPaymentDraft(invoice).paymentMethod === "on_platform" && (
-                        <div className="panel-hint">
-                          On-platform simulation selected. Receipt media is optional.
+                      {isOnlineDraft && (
+                        <div className="review-summary-box">
+                          <strong>Online checkout</strong>
+                          <div className="panel-hint" style={{ marginTop: "0.3rem" }}>
+                            {onlineCheckoutReady
+                              ? hasCheckout
+                                ? `Checkout ${paymentDraft.providerStatus || "pending"}. Finish the provider payment, then verify it here.`
+                                : "StudyFlow will open a secure checkout window and store the attempt in your payment history."
+                              : "Online checkout is not configured yet, so use transfer or cash until the provider is connected."}
+                          </div>
+                          {!!paymentDraft.transactionReference && (
+                            <div className="calendar-meta" style={{ marginTop: "0.45rem" }}>
+                              Provider Ref: {paymentDraft.transactionReference}
+                            </div>
+                          )}
+                          {!!paymentDraft.checkoutMessage && (
+                            <div className="panel-hint" style={{ marginTop: "0.45rem" }}>
+                              {paymentDraft.checkoutMessage}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.55rem" }}>
+                            {hasCheckout && paymentDraft.checkoutUrl ? (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                type="button"
+                                onClick={() => openCheckoutWindow(invoice.id)}
+                              >
+                                Open Checkout
+                              </button>
+                            ) : null}
+                            {hasCheckout ? (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  reconcilePayment(paymentDraft.checkoutPaymentId, invoice.id)
+                                }
+                              >
+                                Verify Payment
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       )}
                       <div style={{ display: "flex", gap: "0.5rem" }}>
                         <button
                           className="btn btn-ghost btn-sm"
-                          disabled={busy}
+                          type="button"
+                          disabled={submitButtonDisabled}
+                          title={submitButtonTitle}
                           onClick={() => markInvoicePaid(invoice.id)}
                         >
-                          Submit Payment
+                          {busy
+                            ? isOnlineDraft
+                              ? hasCheckout
+                                ? "Checking Checkout..."
+                                : "Starting Checkout..."
+                              : "Submitting Payment..."
+                            : isOnlineDraft
+                            ? hasCheckout
+                              ? "Refresh Checkout"
+                              : "Start Checkout"
+                            : "Submit Payment"}
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -902,7 +1011,8 @@ export default function FeesWorkspace({ user, navRoute }) {
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
           {!invoices.length && <div className="empty-col">No invoices yet.</div>}
         </div>
       </div>
@@ -1014,6 +1124,12 @@ export default function FeesWorkspace({ user, navRoute }) {
                 Method: {payment.paymentMethod || "transfer"}
                 {payment.transactionReference ? ` | Ref: ${payment.transactionReference}` : ""}
               </div>
+              {payment.paymentProvider ? (
+                <div className="calendar-meta">
+                  Provider: {payment.paymentProvider}
+                  {payment.providerStatus ? ` | Status: ${payment.providerStatus}` : ""}
+                </div>
+              ) : null}
               {!!payment.schoolReceiptNo && (
                 <div className="calendar-meta">
                   School Receipt: {payment.schoolReceiptNo}
@@ -1042,6 +1158,29 @@ export default function FeesWorkspace({ user, navRoute }) {
                 <div className="review-summary-box">{payment.schoolReceiptNote}</div>
               )}
               <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.45rem" }}>
+                {isStudent &&
+                payment.paymentMethod === "on_platform" &&
+                payment.status === "CheckoutPending" ? (
+                  <>
+                    {payment.checkoutUrl ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => openCheckoutWindow(payment.invoiceId)}
+                      >
+                        Open Checkout
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy}
+                      onClick={() => reconcilePayment(payment.id, payment.invoiceId)}
+                    >
+                      Verify Payment
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"

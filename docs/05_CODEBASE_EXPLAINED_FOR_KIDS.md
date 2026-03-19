@@ -72,15 +72,23 @@ It includes:
 - transcript and summary
 - action items
 - community feed panel
-- uses a helper hook to manage people lists, chat refresh, meeting state, live transcript, summary sync, optional external AI summary requests, and follow-up actions
+- uses a helper hook to manage people lists, chat refresh, meeting state, live transcript, summary sync, optional external AI summary requests, provider status checks, and follow-up actions
+- it now also keeps a local safety copy of in-progress meeting notes so refreshes or short connection problems do not easily erase the work, and it quietly sends progress checkpoints back to the backend while a call is active
+- if an audio or video file is uploaded, the backend can also ask an outside AI helper to turn that media into transcript text
+- after the summary is made, the suggested tasks can now be edited before they move into the real task board
+- before a call starts, StudyFlow now checks if the join link, internet, microphone, camera, and transcript tools look ready
+- if the embedded call gets interrupted, the user can now rejoin inside the page or open a fresh call window without throwing away the draft notes
+- if a media transcript takes longer, StudyFlow now gives it a job card, keeps checking the backend, and fills the transcript + refreshed task suggestions back into the meeting when it is done
+- when people review those suggested tasks, StudyFlow now remembers which ones were accepted, rejected, edited, or already synced, so the meeting still tells the full story later
 
 Meeting flow:
 1. create/open meeting
-2. start call
+2. run preflight and start call
 3. collect transcript
-4. generate summary
-5. accept todos
-6. sync todos to action list/tasks/calendar
+4. if media transcript is still cooking, keep polling the transcript job
+5. generate or refresh summary
+6. review suggestions and keep the history
+7. sync accepted todos to action list/tasks/calendar
 
 ## 2.6 `src/components/CoursesWorkspace.jsx`
 
@@ -99,6 +107,8 @@ This is the school cashier room.
 It:
 - shows available fee plans and generated invoices
 - lets students upload payment proof and download invoices/receipts
+- can now open a real online checkout for `on_platform` payments when a provider is connected
+- lets students come back later, reopen that checkout, and ask the backend to verify whether the money really went through
 - lets schools confirm payments and issue school receipt notes
 - uses a helper hook plus shared fee helpers to manage invoice state, payment drafts, and confirmation queues
 
@@ -152,6 +162,10 @@ It:
 - extracts todo-like lines
 - returns summary, key points, and action plan
 
+The backend can now also ask an outside AI helper for the summary, but it sends extra meeting clues like title, schedule, participants, and transcript source so the answer is more grounded.
+
+It can also ask the outside AI helper to transcribe uploaded meeting audio, then feed that text into the same summary and task-suggestion flow.
+
 ## 3. Backend Rooms (Main Files)
 
 ## 3.1 `server/app.js`
@@ -179,6 +193,15 @@ Important files:
 - `server/domains/commerce/feesRoutes.js`
 - `server/domains/commerce/marketplaceRoutes.js`
 - `server/domains/commerce/bootstrap.js`
+
+The fees room now also talks to a helper called `server/shared/paymentRail.js`.
+
+That helper:
+- knows whether online checkout is turned on
+- talks to the payment company from the backend only
+- starts checkout links
+- checks whether a payment really succeeded before StudyFlow says an invoice is paid
+- checks signed webhook messages too, so a real successful payment can sometimes close itself automatically without the student pressing the verify button
 
 ## 3.3 `server/domains/community/routes.js`
 

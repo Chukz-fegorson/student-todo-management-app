@@ -63,9 +63,41 @@ export function createPaymentDraft(invoice = {}) {
     open: false,
     paidForLabel: getInvoicePurposeLabel(invoice),
     paymentMethod: "transfer",
+    paymentProvider: "",
+    providerStatus: "",
+    checkoutStatus: "idle",
+    checkoutPaymentId: "",
+    checkoutUrl: "",
+    checkoutAccessCode: "",
+    checkoutMessage: "",
     transactionReference: "",
     receiptMedia: [],
     receiptUrlDraft: "",
     notes: "",
+  };
+}
+
+export function createCheckoutDraftPatch(payment = {}) {
+  const status = String(payment.status || "").trim();
+  const checkoutStatus =
+    status === "Confirmed"
+      ? "confirmed"
+      : status === "Rejected"
+      ? "failed"
+      : status === "CheckoutPending"
+      ? "pending"
+      : "idle";
+
+  return {
+    checkoutAccessCode: payment.checkoutAccessCode || "",
+    checkoutMessage: "",
+    checkoutPaymentId: payment.id || "",
+    checkoutStatus,
+    checkoutUrl: payment.checkoutUrl || "",
+    paymentMethod: "on_platform",
+    paymentProvider: payment.paymentProvider || "",
+    providerStatus: payment.providerStatus || "",
+    transactionReference:
+      payment.providerReference || payment.transactionReference || "",
   };
 }

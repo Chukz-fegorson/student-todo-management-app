@@ -5,6 +5,48 @@ import { safeSlug } from "../lib/collaboration";
 import { useCollaborationHub } from "../hooks/useCollaborationHub";
 import CommunityFeedPanel from "./CommunityFeedPanel";
 
+function describeConfiguredSummaryEngine(status, loading) {
+  if (loading) {
+    return "StudyFlow is checking whether the backend AI summary provider is ready.";
+  }
+
+  if (status.externalProvider.available) {
+    const model = status.externalProvider.model || status.externalProvider.mode;
+    return `External AI is ready through ${model}. ${
+      status.capabilities?.transcription
+        ? `Audio transcription is also available through ${
+            status.transcriptionProvider?.model || "the configured model"
+          }. `
+        : ""
+    }StudyFlow will still fall back to the local summarizer if that provider fails.`;
+  }
+
+  if (status.externalProvider.readiness === "missing_credentials") {
+    return "External AI is not fully configured on the backend, so StudyFlow is currently using the local transcript summarizer.";
+  }
+
+  if (status.externalProvider.readiness === "unsupported_mode") {
+    return `AI mode "${status.externalProvider.mode}" is not supported yet, so StudyFlow is using the local transcript summarizer.`;
+  }
+
+  return "External AI is disabled right now, so StudyFlow is using the local transcript summarizer.";
+}
+
+function describeLatestSummarySource(summary) {
+  const provider = summary?.provider;
+  if (!provider) return "";
+
+  if (provider.source === "external") {
+    return provider.model
+      ? `Latest summary came from ${provider.model}.`
+      : "Latest summary came from the external provider.";
+  }
+
+  return provider.fallbackReason
+    ? `Latest summary used the local fallback because ${provider.fallbackReason}.`
+    : "Latest summary used the local deterministic summarizer.";
+}
+
 export default function CollaborationHubModal({
   user,
   onClose,
@@ -12,6 +54,7 @@ export default function CollaborationHubModal({
   navRoute,
 }) {
   const {
+    activeMeetingTranscriptJob,
     acceptedSummaryTodos,
     acceptAllSummaryTodos,
     actionItems,
@@ -19,11 +62,15 @@ export default function CollaborationHubModal({
     activeMeetingId,
     addSummaryTodosToActionList,
     addSummaryTodosToCalendar,
+    aiSummaryStatus,
     broadcastDirectory,
     broadcastRecipients,
     broadcastSearch,
     broadcastText,
+    callFrameState,
+    callPreflight,
     callSession,
+    callReliability,
     chatDirectory,
     chatLoading,
     chatMessages,
@@ -32,18 +79,22 @@ export default function CollaborationHubModal({
     collabHighlights,
     createMeeting,
     creatingMeeting,
+    discardRecoveredDraft,
     directoryLoading,
     endingCall,
     endMeetingCall,
     error,
     exportActionItemsToCalendarFile,
     handleCloseHub,
+    handleCallFrameLoad,
     handleGenerateSummary,
     handleNotesMediaUpload,
+    handleTranscribeMeetingMedia,
     hasMeetingReport,
     isCallOnActiveMeeting,
     loadActionItems,
     loadChatThread,
+    loadingAiSummaryStatus,
     loadingActionItems,
     loadingMeetingDetail,
     meetingForm,
@@ -57,7 +108,13 @@ export default function CollaborationHubModal({
     openMeeting,
     peopleSearch,
     planFollowUpMeetingFromSummary,
+    refreshMeetingTranscriptJob,
+    refreshAiSummaryStatus,
+    rejectSummaryTodo,
+    rejoinMeetingCall,
+    resetSummaryTodoReview,
     removeNotesAttachment,
+    runCallPreflight,
     saveMeetingNotes,
     savingActionItems,
     savingNotes,
@@ -75,7 +132,6 @@ export default function CollaborationHubModal({
     setMeetingListFilter,
     setMeetingParticipantSearch,
     setNotice,
-    setNotesTranscript,
     setPeopleSearch,
     setSelectedChatUserId,
     setShowCreateMeetingForm,
@@ -84,14 +140,37 @@ export default function CollaborationHubModal({
     startLiveTranscript,
     startMeetingCall,
     stopLiveTranscript,
+    summaryTaskEdits,
+    summaryTaskSuggestions,
     tab,
+    transcribingMeetingMedia,
     toggleAcceptedSummaryTodo,
     toggleActionItem,
     toggleBroadcastRecipient,
     toggleParticipant,
     transcriptLive,
+    transcriptSupported,
+    updateSummaryTaskDeadline,
+    updateSummaryTaskDescription,
+    updateNotesTranscript,
     visibleMeetings,
   } = useCollaborationHub({ user, onClose, navRoute });
+
+  const configuredSummaryEngine = describeConfiguredSummaryEngine(
+    aiSummaryStatus,
+    loadingAiSummaryStatus
+  );
+  const latestSummarySource = describeLatestSummarySource(notesSummary);
+  const aiStatusLabel = loadingAiSummaryStatus
+    ? "Checking AI"
+    : aiSummaryStatus.effectiveProvider.source === "external"
+      ? "External Ready"
+      : "Local Fallback";
+  const latestSummaryLabel = notesSummary?.provider
+    ? notesSummary.provider.source === "external"
+      ? "Latest: External"
+      : "Latest: Local"
+    : "";
 
   return (
     <div
@@ -564,6 +643,13 @@ export default function CollaborationHubModal({
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
+                        onClick={() => runCallPreflight(activeMeeting, { announce: true })}
+                      >
+                        Run Preflight
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
                         onClick={() =>
                           exportMeetingToCalendar(
                             activeMeeting,
@@ -577,18 +663,18 @@ export default function CollaborationHubModal({
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            const opened = window.open(
-                              activeMeeting.joinUrl,
-                              "_blank",
-                              "noopener,noreferrer"
-                            );
-                            if (!opened) {
-                              setNotice("Popup blocked. Allow popups to open full call window.");
-                            }
-                          }}
+                          onClick={() => rejoinMeetingCall({ mode: "embed" })}
                         >
-                          Open Full Call
+                          Rejoin Embedded Call
+                        </button>
+                      )}
+                      {isCallOnActiveMeeting && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => rejoinMeetingCall({ mode: "window" })}
+                        >
+                          Open Rejoin Window
                         </button>
                       )}
                     </div>
@@ -605,6 +691,63 @@ export default function CollaborationHubModal({
                     )}
                   </div>
 
+                  <div className="collab-health-strip">
+                    <span className={`summary-provider-pill ${callReliability.preflightTone}`}>
+                      Call Ready: {callReliability.preflightLabel}
+                    </span>
+                    <span className={`summary-provider-pill ${callReliability.networkTone}`}>
+                      Network: {callReliability.networkLabel}
+                    </span>
+                    <span className={`summary-provider-pill ${callPreflight.microphone.tone}`}>
+                      Mic: {callPreflight.microphone.label}
+                    </span>
+                    <span className={`summary-provider-pill ${callPreflight.camera.tone}`}>
+                      Camera: {callPreflight.camera.label}
+                    </span>
+                    <span className={`summary-provider-pill ${callReliability.transcriptTone}`}>
+                      Transcript: {callReliability.transcriptLabel}
+                    </span>
+                    <span className={`summary-provider-pill ${callReliability.syncTone}`}>
+                      Server Sync: {callReliability.syncLabel}
+                    </span>
+                    <span className={`summary-provider-pill ${callReliability.protectionTone}`}>
+                      Draft Guard: {callReliability.protectionLabel}
+                    </span>
+                    <span className={`summary-provider-pill ${callReliability.frameTone}`}>
+                      Call Frame: {callReliability.frameLabel}
+                    </span>
+                  </div>
+                  <div className="collab-health-note">
+                    {callReliability.guidance}
+                    {!!callReliability.preflightNote && ` ${callReliability.preflightNote}`}
+                    {!!callReliability.lastCaptureLabel && ` ${callReliability.lastCaptureLabel}`}
+                    {!!callReliability.syncNote && ` ${callReliability.syncNote}`}
+                    {!!callReliability.frameNote && ` ${callReliability.frameNote}`}
+                    {!!callReliability.mediaWarning && ` ${callReliability.mediaWarning}`}
+                  </div>
+                  {!!callPreflight.blockers.length && (
+                    <div className="collab-health-note collab-health-note-alert">
+                      {callPreflight.blockers.join(" ")}
+                    </div>
+                  )}
+                  {!!callSession.active && !transcriptSupported && (
+                    <div className="collab-health-note collab-health-note-alert">
+                      This browser cannot run live transcript, so typed notes and uploaded transcript files are the safer path for this call.
+                    </div>
+                  )}
+                  {!!callReliability.protectionLabel.startsWith("Recovered") &&
+                    !callSession.active && (
+                      <div className="panel-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={discardRecoveredDraft}
+                        >
+                          Discard Recovered Draft
+                        </button>
+                      </div>
+                    )}
+
                   <div className="panel-subtitle">
                     Participants ({(activeMeeting.participants || []).length})
                   </div>
@@ -620,10 +763,12 @@ export default function CollaborationHubModal({
                     <div className="collab-call-wrap">
                       <div className="panel-subtitle">Live Call Session</div>
                       <iframe
+                        key={callFrameState.key}
                         title={`StudyFlow Call ${activeMeeting.title}`}
                         src={callSession.joinUrl}
                         className="collab-call-frame"
                         allow="camera; microphone; fullscreen; display-capture; autoplay"
+                        onLoad={handleCallFrameLoad}
                       />
                     </div>
                   )}
@@ -649,6 +794,23 @@ export default function CollaborationHubModal({
                       >
                         Generate AI Summary
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={handleTranscribeMeetingMedia}
+                        disabled={transcribingMeetingMedia}
+                      >
+                        {transcribingMeetingMedia ? "Transcribing..." : "Transcribe Audio / Video"}
+                      </button>
+                      {!!activeMeetingTranscriptJob?.id && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => refreshMeetingTranscriptJob(activeMeetingTranscriptJob.id)}
+                        >
+                          Refresh Transcript Job
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
@@ -691,6 +853,45 @@ export default function CollaborationHubModal({
                         : "Open any past meeting from the calendar list to view saved transcript, AI summary, and todos."}
                       {` Accepted AI todos: ${acceptedSummaryTodos.length}.`}
                     </div>
+                    {!!activeMeetingTranscriptJob?.id && (
+                      <div className="collab-transcript-job">
+                        <span
+                          className={`summary-provider-pill ${
+                            activeMeetingTranscriptJob.status === "completed"
+                              ? "ready"
+                              : activeMeetingTranscriptJob.status === "failed"
+                                ? "danger"
+                                : "fallback"
+                          }`}
+                        >
+                          Transcript Job:{" "}
+                          {activeMeetingTranscriptJob.status === "queued"
+                            ? "Queued"
+                            : activeMeetingTranscriptJob.status === "processing"
+                              ? "Processing"
+                              : activeMeetingTranscriptJob.status === "completed"
+                                ? activeMeetingTranscriptJob.applied
+                                  ? "Applied"
+                                  : "Ready"
+                                : "Failed"}
+                        </span>
+                        {!!activeMeetingTranscriptJob.attachmentName && (
+                          <span className="summary-provider-pill fallback">
+                            File: {activeMeetingTranscriptJob.attachmentName}
+                          </span>
+                        )}
+                        <p className="collab-health-note">
+                          {activeMeetingTranscriptJob.status === "completed"
+                            ? activeMeetingTranscriptJob.applied
+                              ? "AI transcript was added to the meeting notes and the summary suggestions were refreshed."
+                              : "AI transcript is ready and will be applied to this meeting."
+                            : activeMeetingTranscriptJob.status === "failed"
+                              ? activeMeetingTranscriptJob.error ||
+                                "AI transcription failed. You can retry from this meeting."
+                              : "StudyFlow is polling the backend transcript job and will refresh the summary suggestions automatically when it finishes."}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="field">
                       <label>Upload Transcript / Media Files</label>
@@ -740,7 +941,7 @@ export default function CollaborationHubModal({
                       <label>Live Transcript</label>
                       <textarea
                         value={notesTranscript}
-                        onChange={(event) => setNotesTranscript(event.target.value)}
+                        onChange={(event) => updateNotesTranscript(event.target.value)}
                         placeholder="Transcript appears here. You can also paste notes manually."
                         style={{ minHeight: "160px" }}
                       />
@@ -749,6 +950,56 @@ export default function CollaborationHubModal({
                     <div className="field">
                       <label>AI Summary</label>
                       <div className="collab-summary-box">
+                        <div className="collab-summary-status">
+                          <div className="collab-summary-status-copy">
+                            <strong>Summary Engine</strong>
+                            <p>{configuredSummaryEngine}</p>
+                            {!!latestSummarySource && (
+                              <p className="collab-summary-meta">{latestSummarySource}</p>
+                            )}
+                            {!!notesSummary?.generatedAt && (
+                              <p className="collab-summary-meta">
+                                Generated {formatDateTime(notesSummary.generatedAt)}
+                              </p>
+                            )}
+                            {!!aiSummaryStatus.error && !loadingAiSummaryStatus && (
+                              <p className="collab-summary-warning">
+                                Status check note: {aiSummaryStatus.error}
+                              </p>
+                            )}
+                          </div>
+                          <div className="collab-summary-status-actions">
+                            <span
+                              className={`summary-provider-pill ${
+                                aiSummaryStatus.effectiveProvider.source === "external"
+                                  ? "ready"
+                                  : "fallback"
+                              }`}
+                            >
+                              {aiStatusLabel}
+                            </span>
+                            {!!latestSummaryLabel && (
+                              <span
+                                className={`summary-provider-pill ${
+                                  notesSummary?.provider?.source === "external"
+                                    ? "ready"
+                                    : "fallback"
+                                }`}
+                              >
+                                {latestSummaryLabel}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={refreshAiSummaryStatus}
+                              disabled={loadingAiSummaryStatus}
+                            >
+                              {loadingAiSummaryStatus ? "Checking..." : "Refresh AI Status"}
+                            </button>
+                          </div>
+                        </div>
+
                         {!notesSummary && (
                           <div className="empty-col">
                             Generate summary to extract key points, todos, and action plan.
@@ -772,7 +1023,7 @@ export default function CollaborationHubModal({
                             <div className="summary-section">
                               <div className="summary-todo-head">
                                 <strong>
-                                  AI Todo Suggestions ({(notesSummary.todos || []).length})
+                                  AI Task Suggestions ({summaryTaskSuggestions.length})
                                 </strong>
                                 <div className="panel-actions">
                                   <button
@@ -792,19 +1043,97 @@ export default function CollaborationHubModal({
                                 </div>
                               </div>
                               <div className="collab-suggest-list">
-                                {(notesSummary.todos || []).map((entry) => (
-                                  <label key={entry} className="collab-suggest-item">
-                                    <input
-                                      type="checkbox"
-                                      checked={acceptedSummaryTodos.includes(entry)}
-                                      onChange={() => toggleAcceptedSummaryTodo(entry)}
-                                    />
-                                    <span>{entry}</span>
-                                  </label>
+                                {summaryTaskSuggestions.map((entry) => (
+                                  <div key={entry.title} className="collab-suggest-card">
+                                    <label className="collab-suggest-item">
+                                      <input
+                                        type="checkbox"
+                                        checked={acceptedSummaryTodos.includes(entry.title)}
+                                        onChange={() => toggleAcceptedSummaryTodo(entry.title)}
+                                      />
+                                      <span>{entry.title}</span>
+                                    </label>
+                                    <div className="collab-suggest-meta">
+                                      <span>
+                                        Review:{" "}
+                                        {entry.reviewStatus === "accepted"
+                                          ? "Accepted"
+                                          : entry.reviewStatus === "rejected"
+                                            ? "Rejected"
+                                            : "Pending"}
+                                      </span>
+                                      <span>Owner: {entry.owner}</span>
+                                      <span>Due cue: {entry.dueLabel}</span>
+                                      <span>Urgency: {entry.urgency}</span>
+                                      {entry.confidence !== null && (
+                                        <span>Confidence: {entry.confidence}</span>
+                                      )}
+                                      {!!entry.syncedAt && (
+                                        <span>
+                                          Synced: {entry.syncedTarget || "task flow"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="panel-actions">
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => toggleAcceptedSummaryTodo(entry.title)}
+                                      >
+                                        {acceptedSummaryTodos.includes(entry.title)
+                                          ? "Mark Pending"
+                                          : "Accept"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => rejectSummaryTodo(entry.title)}
+                                      >
+                                        Reject
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => resetSummaryTodoReview(entry.title)}
+                                      >
+                                        Reset
+                                      </button>
+                                    </div>
+                                    <div className="field">
+                                      <label>Task Description</label>
+                                      <textarea
+                                        value={
+                                          summaryTaskEdits[entry.title]?.description || ""
+                                        }
+                                        onChange={(event) =>
+                                          updateSummaryTaskDescription(
+                                            entry.title,
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="Refine the suggested task description before syncing."
+                                      />
+                                    </div>
+                                    <div className="field">
+                                      <label>Task Deadline</label>
+                                      <input
+                                        type="datetime-local"
+                                        value={
+                                          summaryTaskEdits[entry.title]?.deadlineLocalValue || ""
+                                        }
+                                        onChange={(event) =>
+                                          updateSummaryTaskDeadline(
+                                            entry.title,
+                                            event.target.value
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
                               <div className="panel-hint">
-                                {acceptedSummaryTodos.length} accepted suggestion(s).
+                                {acceptedSummaryTodos.length} accepted suggestion(s). Accepted, rejected, and edited task reviews now stay with this meeting when you reopen it later.
                               </div>
                             </div>
                             <div className="summary-section">

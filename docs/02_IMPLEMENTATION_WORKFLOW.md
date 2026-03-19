@@ -39,8 +39,24 @@ This approach enabled fast iteration from core task management into collaboratio
 
 - transcript capture: browser speech recognition (when supported)
 - summary/todo/action extraction: backend can now call an optional openai-compatible provider, while `src/lib/meetingAi.js` remains the local deterministic fallback
+- media transcription: uploaded meeting audio/video can optionally be sent through an openai-compatible transcription model before entering the summary pipeline
 - provider configuration now lives in backend env settings so API keys stay off the client
+- collaboration UI also exposes backend summary-provider readiness through `/ai/meeting-summary/status`, while summary requests send richer meeting context (schedule, participants, transcript source, attachment kinds)
+- meeting reliability is hardened with browser-side draft snapshots, restore-on-reopen behavior, unload/offline protection, and periodic backend checkpoints for in-progress collaboration calls
+- AI-extracted meeting actions now pass through an editable suggestion layer before they are synced into action items or student kanban tasks
+- live meeting calls now also run through browser-side preflight checks for link readiness, network, mic, camera, and transcript support, with explicit embedded/window rejoin controls for interrupted Jitsi sessions
+- uploaded meeting audio/video now supports async backend transcription jobs, and recovered meeting drafts can resume polling those jobs until transcript-driven summary suggestions are refreshed
+- reviewed AI meeting actions now persist as part of the saved meeting summary, including accept/reject state, edited wording, deadline refinements, and sync markers when actions graduate into real work
 - no paid external AI dependency is required for local development because the fallback path remains available
+
+### Payment Rail Layer (Current)
+
+- fees still support manual `transfer` and `cash` evidence + school confirmation
+- `on_platform` fee payments can now use an optional provider-backed checkout flow
+- backend keeps provider refs, checkout URLs, verification payloads, and reconciliation timestamps inside `sf_fee_payments`
+- students can now resume checkout, verify provider status, and only mark invoices paid after server-side reconciliation succeeds
+- provider webhooks can now auto-confirm matching online fee payments, while manual reconcile remains available as a fallback path
+- provider configuration stays in backend env settings so secret keys are never exposed in the frontend bundle
 
 ## 3. Module-by-Module Build Workflow
 
@@ -77,6 +93,7 @@ This approach enabled fast iteration from core task management into collaboratio
 
 - fee plans and invoices
 - student-side payment evidence upload
+- optional provider-backed online checkout and reconciliation for `on_platform` payments
 - school-side verification and receipt issuance
 - notification and status tracking
 
@@ -179,9 +196,9 @@ The March 6-7 implementation cycle is complete.
 
 The next approved execution order is now:
 
-1. external AI provider integration for higher-quality transcript + summary outputs
-2. production-grade real-time call hardening and reliability controls
-3. real payment rail integration for fees and transaction reconciliation
+1. external AI provider integration for higher-quality transcript + summary outputs (implemented baseline)
+2. production-grade real-time call hardening and reliability controls (implemented baseline)
+3. real payment rail integration for fees and transaction reconciliation (implemented baseline)
 4. wallet/escrow foundation for marketplace negotiation and auction flows
 5. media-rich social/community expansion:
    channels, threads, moderation depth, and photo/video upload support

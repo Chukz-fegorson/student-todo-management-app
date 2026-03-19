@@ -11,10 +11,32 @@ This release log complements the deeper engineering trail in `docs/03_CHANGE_REQ
 - optional server-backed external AI summary integration for meeting transcripts through `/ai/meeting-summary`
 - environment-based provider configuration for openai-compatible summary providers
 - collaboration route and provider tests covering the new AI summary path
+- backend AI status endpoint at `/ai/meeting-summary/status` for collaboration diagnostics
+- local collaboration call-draft recovery helpers and test coverage for meeting interruption protection
+- optional backend AI transcription endpoint at `/ai/meeting-transcript` for uploaded meeting audio/video attachments
+- editable AI task suggestion drafts in the collaboration workspace before action-item or kanban sync
+- collaboration call preflight checks for join-link readiness, connection state, microphone detection, camera detection, and browser transcript readiness
+- embedded call rejoin controls for refreshing the in-app meeting frame or opening a fresh recovery window
+- async meeting-media transcription jobs through `/ai/meeting-transcript/jobs` with polling-friendly job status responses
+- persisted meeting-level AI task review history covering accepted, rejected, pending, edited, and synced suggestion states
+- optional provider-backed online fee checkout through `/fees/payment-provider/status`, `/fees/invoices/:id/checkout`, and `/fees/payments/:id/reconcile`
+- fee-route integration coverage for provider status, checkout creation, legacy on-platform guardrails, and successful reconciliation
+- signed payment-provider webhook support at `/fees/payment-provider/webhook` for automatic online fee confirmation
+- fee-route integration coverage for the manual `transfer`/`cash` payment proof flow through school confirmation
 
 ### Changed
 
 - collaboration summary generation now prefers the external provider when configured and falls back to the local deterministic summarizer when unavailable
+- AI meeting-summary requests now include richer meeting context such as schedule, participants, transcript source, and attachment types
+- collaboration UI now shows configured AI engine health plus the source of the latest saved summary
+- collaboration call UX now protects in-progress transcript/summary drafts across refresh/offline interruptions, periodically checkpoints active-call notes back to the server, and surfaces live network/transcript/sync/draft-health status
+- collaboration meeting media can now be transcribed through a configured OpenAI-compatible audio provider, while accepted AI task suggestions now support per-task description and deadline review before they become real tasks
+- active collaboration meetings now run through a reusable preflight report and can explicitly rejoin the embedded Jitsi session after interruption without losing the current meeting draft
+- collaboration now queues uploaded media transcription in the backend, resumes polling from recovered local meeting drafts, and refreshes transcript-driven summary suggestions automatically when a job completes
+- collaboration meeting summaries now keep task-review history as a first-class record, so reopening a meeting restores prior accept/reject decisions, edited descriptions/deadlines, and sync markers before anything is pushed again
+- fees now keep manual `transfer` and `cash` confirmation unchanged, but `on_platform` payments run through a real provider checkout lifecycle with stored provider refs, checkout resume support, and server-side verification before an invoice is marked paid
+- provider-backed online fees can now auto-confirm from signed webhook events, while the manual `Verify Payment` action remains as a safe fallback when webhook delivery is delayed
+- manual fee payment cards now show receipt-readiness before submit, auto-include a pasted receipt URL during submission, and align file guidance with the current secure JSON upload limits
 
 ## [2.0.0] - 2026-03-19
 

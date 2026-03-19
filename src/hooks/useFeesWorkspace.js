@@ -3,12 +3,18 @@ import { apiGet, apiPost } from "../lib/api";
 import {
   amountNairaFromInvoice,
   amountNairaFromPlan,
+  createCheckoutDraftPatch,
   createInvoiceForm,
   createPaymentDraft,
   createPlanForm,
   getInvoiceItems,
   getInvoicePurposeLabel,
 } from "../lib/fees";
+
+const MAX_RECEIPT_FILES_PER_UPLOAD = 3;
+const MAX_RECEIPT_FILE_BYTES = 3 * 1024 * 1024;
+const MAX_RECEIPT_MEDIA_ITEMS = 8;
+const MAX_RECEIPT_PAYLOAD_CHARS = 12 * 1024 * 1024;
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -19,11 +25,19 @@ function fileToDataUrl(file) {
   });
 }
 
+function estimateReceiptPayloadChars(mediaItems = []) {
+  return mediaItems.reduce(
+    (sum, entry) => sum + String(entry?.url || "").length,
+    0
+  );
+}
+
 export function useFeesWorkspace({ user, navRoute }) {
   const [plans, setPlans] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [students, setStudents] = useState([]);
+  const [paymentProviderStatus, setPaymentProviderStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,12 +70,20 @@ export function useFeesWorkspace({ user, navRoute }) {
         apiGet("/fees/plans"),
         apiGet("/fees/invoices"),
         apiGet("/fees/payments"),
+        apiGet("/fees/payment-provider/status").catch(() => null),
       ];
       if (!isStudent) requests.push(apiGet("/students"));
-      const [plansData, invoicesData, paymentsData, studentsData] = await Promise.all(requests);
+      const [
+        plansData,
+        invoicesData,
+        paymentsData,
+        paymentProviderData,
+        studentsData,
+      ] = await Promise.all(requests);
       setPlans(Array.isArray(plansData) ? plansData : []);
       setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setPaymentProviderStatus(paymentProviderData || null);
       setStudents(Array.isArray(studentsData) ? studentsData : []);
     } catch (err) {
       setError(err.message || "Failed to load fee workspace");
@@ -128,6 +150,30 @@ export function useFeesWorkspace({ user, navRoute }) {
     () => payments.filter((entry) => entry.status === "PendingConfirmation"),
     [payments]
   );
+  const pendingCheckoutPayments = useMemo(
+    () =>
+      payments.filter(
+        (entry) =>
+          entry.paymentMethod === "on_platform" && entry.status === "CheckoutPending"
+      ),
+    [payments]
+  );
+  const checkoutPaymentByInvoiceId = useMemo(() => {
+    const map = new Map();
+    [...payments]
+      .filter((entry) => entry.paymentMethod === "on_platform")
+      .sort((a, b) => {
+        const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTs - aTs;
+      })
+      .forEach((payment) => {
+        if (!map.has(payment.invoiceId)) {
+          map.set(payment.invoiceId, payment);
+        }
+      });
+    return map;
+  }, [payments]);
   const unpaidInvoices = useMemo(
     () => invoices.filter((entry) => entry.status === "Unpaid"),
     [invoices]
@@ -176,6 +222,40 @@ export function useFeesWorkspace({ user, navRoute }) {
     () => selectedPlans.reduce((sum, plan) => sum + amountNairaFromPlan(plan), 0),
     [selectedPlans]
   );
+  const onlineCheckoutReady = Boolean(paymentProviderStatus?.available);
+
+  useEffect(() => {
+    if (!isStudent || !checkoutPaymentByInvoiceId.size) return;
+
+    setPaymentDrafts((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      invoices.forEach((invoice) => {
+        const payment = checkoutPaymentByInvoiceId.get(invoice.id);
+        if (!payment) return;
+
+        const current = next[invoice.id] || createPaymentDraft(invoice);
+        const patch = createCheckoutDraftPatch(payment);
+        const merged = {
+          ...current,
+          ...patch,
+          notes: payment.notes || current.notes,
+          open: current.open || payment.status === "CheckoutPending",
+          paidForLabel: payment.paidForLabel || current.paidForLabel,
+        };
+
+        const before = JSON.stringify(current);
+        const after = JSON.stringify(merged);
+        if (before !== after) {
+          next[invoice.id] = merged;
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [checkoutPaymentByInvoiceId, invoices, isStudent]);
 
   const togglePlanSelection = useCallback((planId) => {
     setSelectedPlanIds((prev) =>
@@ -192,11 +272,33 @@ export function useFeesWorkspace({ user, navRoute }) {
       if (!files.length) return;
       try {
         setBusy(true);
-        const mediaItems = [];
-        for (const file of files.slice(0, 4)) {
-          if (file.size > 8 * 1024 * 1024) continue;
+        setError("");
+        const draft = getPaymentDraft({ id: invoiceId, title: "" });
+        const nextMedia = [...draft.receiptMedia];
+        const limitedFiles = files.slice(0, MAX_RECEIPT_FILES_PER_UPLOAD);
+        let addedCount = 0;
+        let oversizedCount = 0;
+        let payloadBlockedCount = 0;
+        let skippedByCountLimit = 0;
+
+        for (const file of limitedFiles) {
+          if (nextMedia.length >= MAX_RECEIPT_MEDIA_ITEMS) {
+            skippedByCountLimit += 1;
+            continue;
+          }
+          if (file.size > MAX_RECEIPT_FILE_BYTES) {
+            oversizedCount += 1;
+            continue;
+          }
           const dataUrl = await fileToDataUrl(file);
-          mediaItems.push({
+          if (
+            estimateReceiptPayloadChars(nextMedia) + dataUrl.length >
+            MAX_RECEIPT_PAYLOAD_CHARS
+          ) {
+            payloadBlockedCount += 1;
+            continue;
+          }
+          nextMedia.push({
             id: window.crypto.randomUUID(),
             kind: String(file.type || "").startsWith("video/") ? "video" : "image",
             url: dataUrl,
@@ -204,13 +306,41 @@ export function useFeesWorkspace({ user, navRoute }) {
             mimeType: file.type,
             size: file.size,
           });
+          addedCount += 1;
         }
-        const draft = getPaymentDraft({ id: invoiceId, title: "" });
         updatePaymentDraft(invoiceId, {
-          receiptMedia: [...draft.receiptMedia, ...mediaItems].slice(0, 8),
+          receiptMedia: nextMedia.slice(0, MAX_RECEIPT_MEDIA_ITEMS),
         });
-        if (!mediaItems.length) {
-          setError("No valid files were added. Use images/videos up to 8MB each.");
+        if (!addedCount) {
+          setError(
+            "No valid receipt files were added. Use up to 3 images/videos under 3MB each, or paste a receipt URL instead."
+          );
+          return;
+        }
+
+        const warnings = [];
+        if (files.length > MAX_RECEIPT_FILES_PER_UPLOAD) {
+          warnings.push(
+            `Only the first ${MAX_RECEIPT_FILES_PER_UPLOAD} files were checked this time.`
+          );
+        }
+        if (oversizedCount) {
+          warnings.push(
+            `${oversizedCount} file${oversizedCount === 1 ? "" : "s"} exceeded 3MB.`
+          );
+        }
+        if (payloadBlockedCount) {
+          warnings.push(
+            `${payloadBlockedCount} file${payloadBlockedCount === 1 ? "" : "s"} would make the receipt submission too large for the current upload flow.`
+          );
+        }
+        if (skippedByCountLimit) {
+          warnings.push("Receipt evidence is already at the current item limit.");
+        }
+        if (warnings.length) {
+          setNotice(
+            `Added ${addedCount} receipt item${addedCount === 1 ? "" : "s"}. ${warnings.join(" ")}`
+          );
         }
       } catch (err) {
         setError(err.message || "Failed to read receipt file.");
@@ -227,11 +357,15 @@ export function useFeesWorkspace({ user, navRoute }) {
       const draft = getPaymentDraft({ id: invoiceId, title: "" });
       const url = String(draft.receiptUrlDraft || "").trim();
       if (!url) return;
+      if (draft.receiptMedia.length >= MAX_RECEIPT_MEDIA_ITEMS) {
+        setError("Remove one receipt item before adding another receipt URL.");
+        return;
+      }
       updatePaymentDraft(invoiceId, {
         receiptMedia: [
           ...draft.receiptMedia,
           { id: window.crypto.randomUUID(), kind: "image", url },
-        ].slice(0, 8),
+        ].slice(0, MAX_RECEIPT_MEDIA_ITEMS),
         receiptUrlDraft: "",
       });
     },
@@ -246,6 +380,129 @@ export function useFeesWorkspace({ user, navRoute }) {
       });
     },
     [getPaymentDraft, updatePaymentDraft]
+  );
+
+  const openCheckoutWindow = useCallback(
+    (invoiceId) => {
+      const draft = getPaymentDraft({ id: invoiceId, title: "" });
+      const checkoutUrl = String(draft.checkoutUrl || "").trim();
+      if (!checkoutUrl) {
+        setError("No checkout link is available yet for this invoice.");
+        return;
+      }
+
+      const popup = window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      if (!popup) {
+        setNotice(
+          "Checkout link is ready. Allow pop-ups for StudyFlow or open the saved provider link from this invoice."
+        );
+      }
+    },
+    [getPaymentDraft]
+  );
+
+  const startInvoiceCheckout = useCallback(
+    async (invoiceId) => {
+      const invoice = invoices.find((entry) => entry.id === invoiceId);
+      const draft = getPaymentDraft(invoice || { id: invoiceId, title: "" });
+      const paidForLabel = String(draft.paidForLabel || "").trim();
+      const notes = String(draft.notes || "").trim();
+
+      if (!paidForLabel) {
+        setError("Tell the school what this payment is for.");
+        return;
+      }
+      if (!onlineCheckoutReady) {
+        setError(
+          "Online checkout is not configured yet. Use transfer/cash for now or ask an admin to connect the provider."
+        );
+        return;
+      }
+
+      try {
+        setBusy(true);
+        setError("");
+        const response = await apiPost(`/fees/invoices/${invoiceId}/checkout`, {
+          notes: notes || null,
+          paidForLabel,
+        });
+        const payment = response?.payment || null;
+        if (payment) {
+          updatePaymentDraft(invoiceId, {
+            ...createCheckoutDraftPatch(payment),
+            checkoutMessage: response?.message || "",
+            notes: payment.notes || notes,
+            open: true,
+            paidForLabel: payment.paidForLabel || paidForLabel,
+          });
+        }
+        setNotice(
+          response?.message ||
+            "Online checkout opened. Complete payment, then verify it in StudyFlow."
+        );
+        if (payment?.checkoutUrl) {
+          window.setTimeout(() => {
+            openCheckoutWindow(invoiceId);
+          }, 40);
+        }
+        await loadData();
+      } catch (err) {
+        setError(err.message || "Failed to start online checkout.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [getPaymentDraft, invoices, loadData, onlineCheckoutReady, openCheckoutWindow, updatePaymentDraft]
+  );
+
+  const reconcilePayment = useCallback(
+    async (paymentId, invoiceId = null) => {
+      const targetInvoiceId = invoiceId || null;
+      try {
+        setBusy(true);
+        setError("");
+        const response = await apiPost(`/fees/payments/${paymentId}/reconcile`, {});
+        const payment = response?.payment || null;
+        const resolvedInvoiceId = targetInvoiceId || payment?.invoiceId || null;
+
+        if (resolvedInvoiceId && payment) {
+          const resolvedInvoice =
+            invoices.find((entry) => entry.id === resolvedInvoiceId) || {
+              id: resolvedInvoiceId,
+              title: "",
+            };
+          if (response?.ok) {
+            setPaymentDrafts((prev) => {
+              const next = { ...prev };
+              delete next[resolvedInvoiceId];
+              return next;
+            });
+          } else {
+            updatePaymentDraft(resolvedInvoiceId, {
+              ...createCheckoutDraftPatch(payment),
+              checkoutMessage: response?.message || "",
+              notes: payment.notes || "",
+              open: payment.status === "CheckoutPending",
+              paidForLabel:
+                payment.paidForLabel || getPaymentDraft(resolvedInvoice).paidForLabel,
+            });
+          }
+        }
+
+        setNotice(
+          response?.message ||
+            (response?.ok
+              ? "Payment verified successfully."
+              : "Payment status refreshed.")
+        );
+        await loadData();
+      } catch (err) {
+        setError(err.message || "Failed to verify online payment.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [getPaymentDraft, invoices, loadData, updatePaymentDraft]
   );
 
   const createPlan = useCallback(async () => {
@@ -341,6 +598,17 @@ export function useFeesWorkspace({ user, navRoute }) {
     async (invoiceId) => {
       const invoice = invoices.find((entry) => entry.id === invoiceId);
       const draft = getPaymentDraft(invoice || { id: invoiceId, title: "" });
+      const inlineReceiptUrl = String(draft.receiptUrlDraft || "").trim();
+      if (inlineReceiptUrl && draft.receiptMedia.length >= MAX_RECEIPT_MEDIA_ITEMS) {
+        setError("Remove one receipt item before adding another receipt URL.");
+        return;
+      }
+      const receiptMedia = inlineReceiptUrl
+        ? [
+            ...draft.receiptMedia,
+            { id: window.crypto.randomUUID(), kind: "image", url: inlineReceiptUrl },
+          ].slice(0, MAX_RECEIPT_MEDIA_ITEMS)
+        : draft.receiptMedia;
       const paidForLabel = String(draft.paidForLabel || "").trim();
       const paymentMethod = String(draft.paymentMethod || "transfer").trim();
       const transactionReference = String(draft.transactionReference || "").trim();
@@ -350,7 +618,11 @@ export function useFeesWorkspace({ user, navRoute }) {
         setError("Tell the school what this payment is for.");
         return;
       }
-      if (paymentMethod !== "on_platform" && !draft.receiptMedia.length) {
+      if (paymentMethod === "on_platform") {
+        await startInvoiceCheckout(invoiceId);
+        return;
+      }
+      if (!receiptMedia.length) {
         setError("Upload receipt image/video (or add URL) before sending for confirmation.");
         return;
       }
@@ -358,11 +630,18 @@ export function useFeesWorkspace({ user, navRoute }) {
       try {
         setBusy(true);
         setError("");
+        setNotice("");
+        if (inlineReceiptUrl) {
+          updatePaymentDraft(invoiceId, {
+            receiptMedia,
+            receiptUrlDraft: "",
+          });
+        }
         const payment = await apiPost(`/fees/invoices/${invoiceId}/mark-paid`, {
           paidForLabel,
           paymentMethod,
           transactionReference: transactionReference || null,
-          receiptMedia: draft.receiptMedia,
+          receiptMedia,
           notes: notes || null,
         });
         setNotice(
@@ -382,7 +661,7 @@ export function useFeesWorkspace({ user, navRoute }) {
         setBusy(false);
       }
     },
-    [getPaymentDraft, invoices, loadData]
+    [getPaymentDraft, invoices, loadData, startInvoiceCheckout, updatePaymentDraft]
   );
 
   const confirmPayment = useCallback(
@@ -426,10 +705,15 @@ export function useFeesWorkspace({ user, navRoute }) {
     loading,
     markInvoicePaid,
     notice,
+    onlineCheckoutReady,
+    openCheckoutWindow,
     paidInvoiceByPlanId,
+    paymentProviderStatus,
     pendingPayments,
+    pendingCheckoutPayments,
     planForm,
     plans,
+    reconcilePayment,
     recentPayments,
     removeReceiptMedia,
     schoolReceiptNotes,

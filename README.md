@@ -7,6 +7,13 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - `state`: manages schools/students within one state, grouped by LGA
 - `federal`: manages across states and can operate like school/state
 
+## Current Release
+
+- current release line: `v2`
+- release summary: `CHANGELOG.md`
+- version comparison: `docs/V1_TO_V2.md`
+- detailed engineering trail: `docs/03_CHANGE_REQUEST_LOG.md`
+
 ## Core Features
 
 - Student kanban board: `Todo`, `In Progress`, `Submitted`, `Done`
@@ -37,6 +44,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 
 ## Project Trail Docs
 
+- `CHANGELOG.md`
 - `docs/00_PROJECT_TRAIL_OVERVIEW.md`
 - `docs/01_USER_STORIES.md`
 - `docs/02_IMPLEMENTATION_WORKFLOW.md`
@@ -44,6 +52,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - `docs/04_PROCESS_FLOW_CURRENT_VS_END_GOAL.md`
 - `docs/05_CODEBASE_EXPLAINED_FOR_KIDS.md`
 - `docs/06_PHASE0_EXECUTION_PLAN.md`
+- `docs/V1_TO_V2.md`
 
 ## Local Setup
 

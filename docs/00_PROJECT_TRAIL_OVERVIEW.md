@@ -1,6 +1,6 @@
 # StudyFlow Project Trail Overview
 
-Last updated: March 18, 2026
+Last updated: March 19, 2026
 
 ## 1. Product Vision
 
@@ -78,8 +78,18 @@ Remaining expansions to reach full end goal:
 
 ## 5. Document Map
 
+- `CHANGELOG.md`
 - `docs/01_USER_STORIES.md`
 - `docs/02_IMPLEMENTATION_WORKFLOW.md`
 - `docs/03_CHANGE_REQUEST_LOG.md`
 - `docs/04_PROCESS_FLOW_CURRENT_VS_END_GOAL.md`
+- `docs/05_CODEBASE_EXPLAINED_FOR_KIDS.md`
 - `docs/06_PHASE0_EXECUTION_PLAN.md`
+- `docs/V1_TO_V2.md`
+
+## 6. Version Trail
+
+- `v1`: the pre-Phase-0 app shape that established the product model and core workflows
+- `v2`: the Phase 0 architecture-hardened release with modular frontend workspaces, layered styling, backend domain route seams, and broader backend integration coverage
+
+For a quick comparison between those release lines, read `docs/V1_TO_V2.md`.

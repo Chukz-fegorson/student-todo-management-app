@@ -23,6 +23,10 @@ This release log complements the deeper engineering trail in `docs/03_CHANGE_REQ
 - fee-route integration coverage for provider status, checkout creation, legacy on-platform guardrails, and successful reconciliation
 - signed payment-provider webhook support at `/fees/payment-provider/webhook` for automatic online fee confirmation
 - fee-route integration coverage for the manual `transfer`/`cash` payment proof flow through school confirmation
+- marketplace wallet summary and wallet transaction endpoints through `/market/wallet` and `/market/wallet/transactions`
+- marketplace route coverage for card-order escrow funding and seller wallet release after buyer claim
+- reusable community feed media helpers for post/comment drafts, file limits, and title derivation
+- community route coverage for media-only posts and media-only comments across the feed lifecycle
 
 ### Changed
 
@@ -37,6 +41,13 @@ This release log complements the deeper engineering trail in `docs/03_CHANGE_REQ
 - fees now keep manual `transfer` and `cash` confirmation unchanged, but `on_platform` payments run through a real provider checkout lifecycle with stored provider refs, checkout resume support, and server-side verification before an invoice is marked paid
 - provider-backed online fees can now auto-confirm from signed webhook events, while the manual `Verify Payment` action remains as a safe fallback when webhook delivery is delayed
 - manual fee payment cards now show receipt-readiness before submit, auto-include a pasted receipt URL during submission, and align file guidance with the current secure JSON upload limits
+- marketplace card orders now fund a wallet-backed escrow hold, keep seller payout status on the order record, and release seller wallet proceeds only after buyer claim completes the handoff
+- community feed posts and comments can now carry image/video media, including media-only updates with derived titles, preview grids, and route-level persistence across thread reloads
+- the app shell now lazy-loads role dashboards, account settings, and heavy student/school workspace modules so the production build is split by role/module instead of shipping one oversized client chunk
+
+### Fixed
+
+- resolved the Vite oversized-chunk warning by moving the largest dashboard and module surfaces onto on-demand bundles
 
 ## [2.0.0] - 2026-03-19
 

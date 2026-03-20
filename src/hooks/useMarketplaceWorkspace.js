@@ -11,6 +11,7 @@ import {
   createListingForm,
   createOfferDraft,
   createReviewDraft,
+  createWalletSummary,
   mediaKindFromFile,
   toQueryString,
 } from "../lib/marketplace";
@@ -30,6 +31,8 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [disputes, setDisputes] = useState([]);
+  const [walletSummary, setWalletSummary] = useState(() => createWalletSummary());
+  const [walletTransactions, setWalletTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -120,7 +123,8 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
       orders: [
         `${activeOrders.length} active order${activeOrders.length === 1 ? "" : "s"}`,
         `${completedOrders.length} completed transaction${completedOrders.length === 1 ? "" : "s"}`,
-        `${disputes.length} dispute record${disputes.length === 1 ? "" : "s"}`,
+        `Wallet available: N${Number(walletSummary.availableBalanceNaira || 0).toLocaleString()}`,
+        `Wallet pending: N${Number(walletSummary.pendingBalanceNaira || 0).toLocaleString()}`,
       ],
       moderation: [
         `${categoryRequests.length} category request${categoryRequests.length === 1 ? "" : "s"}`,
@@ -134,10 +138,11 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
       categories.length,
       categoryRequests.length,
       completedOrders.length,
-      disputes.length,
       myListingCount,
       openDisputeCount,
       products.length,
+      walletSummary.availableBalanceNaira,
+      walletSummary.pendingBalanceNaira,
     ]
   );
 
@@ -163,14 +168,32 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
         apiGet(`/market/products${query}`),
         apiGet("/market/orders"),
         apiGet("/market/disputes"),
+        apiGet("/market/wallet").catch(() => createWalletSummary()),
+        apiGet("/market/wallet/transactions").catch(() => []),
       ];
       if (canModerate) requests.push(apiGet("/market/category-requests"));
-      const [categoriesData, productsData, ordersData, disputesData, requestData] =
+      const [
+        categoriesData,
+        productsData,
+        ordersData,
+        disputesData,
+        walletSummaryData,
+        walletTransactionsData,
+        requestData,
+      ] =
         await Promise.all(requests);
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       setProducts(Array.isArray(productsData) ? productsData : []);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
       setDisputes(Array.isArray(disputesData) ? disputesData : []);
+      setWalletSummary(
+        walletSummaryData && typeof walletSummaryData === "object"
+          ? { ...createWalletSummary(), ...walletSummaryData }
+          : createWalletSummary()
+      );
+      setWalletTransactions(
+        Array.isArray(walletTransactionsData) ? walletTransactionsData : []
+      );
       setCategoryRequests(Array.isArray(requestData) ? requestData : []);
     } catch (err) {
       setError(err.message || "Failed to load marketplace workspace.");
@@ -419,7 +442,7 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
         });
         setNotice(
           paymentMode === "card"
-            ? "Order created. StudyFlow checkout marked payment as cleared. Seller will release the claim code after handoff."
+            ? "Order created. Card payment is now held in StudyFlow escrow until the buyer claim step completes."
             : paymentMode === "transfer"
             ? "Order created. Complete transfer to seller account and wait for seller confirmation."
             : paymentMode === "p2p"
@@ -733,6 +756,8 @@ export function useMarketplaceWorkspace({ user, navRoute }) {
     switchMarketView,
     updateClaimCode,
     userId: user.id,
+    walletSummary,
+    walletTransactions,
     offerDraft,
     moderateProduct,
   };

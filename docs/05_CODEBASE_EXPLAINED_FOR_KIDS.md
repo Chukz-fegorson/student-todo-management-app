@@ -1,6 +1,6 @@
 # StudyFlow Codebase Explained (Like You Are 5)
 
-Last updated: March 19, 2026
+Last updated: March 20, 2026
 
 ## 1. Big Picture
 
@@ -24,6 +24,7 @@ It:
 - decides whether to show login page or dashboard
 - shows top bar (name, role, notifications)
 - opens account settings
+- now opens the biggest dashboard rooms only when they are actually needed, so the app does not carry every heavy room all at once
 
 ## 2.2 `src/pages/AuthPage.jsx`
 
@@ -127,8 +128,9 @@ Important pieces:
 - category + custom category (`Others`)
 - school category add flow
 - claim-code order completion flow
+- wallet-backed escrow for card checkout orders
 - 5-star review UI
-- helper hook manages catalog filters, listing drafts, orders, disputes, and moderation actions
+- helper hook manages catalog filters, listing drafts, wallet state, orders, disputes, and moderation actions
 
 ## 2.9 `src/components/CommunityFeedPanel.jsx`
 
@@ -138,6 +140,7 @@ Users can:
 - create posts (including students now)
 - comment
 - react
+- attach photos or short videos to posts and comments
 
 Scope rules decide who can see which posts.
 
@@ -212,6 +215,7 @@ It handles:
 - feed posts
 - comments
 - reactions
+- media-aware post/comment payloads for image and video attachments
 
 ## 3.4 `server/commerceFeed.js`
 

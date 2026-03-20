@@ -1,6 +1,6 @@
 # StudyFlow Implementation Workflow
 
-Last updated: March 19, 2026
+Last updated: March 20, 2026
 
 ## 1. Delivery Method Used
 
@@ -22,6 +22,7 @@ This approach enabled fast iteration from core task management into collaboratio
 - role-based rendering:
   - `StudentApp`
   - `SchoolDashboard` (used by school/state/federal with scope-aware behavior)
+- the app shell now lazy-loads role dashboards and the heaviest non-task workspace modules so production bundles stay split by actual user flow
 - workspace orchestration is being moved into dedicated hooks such as `useStudentWorkspace`, `useSchoolWorkspace`, `useCoursesWorkspace`, `useFeesWorkspace`, `useMarketplaceWorkspace`, and `useCollaborationHub`
 - large task surfaces are being moved into dedicated workspace components instead of staying inside page files
 - shared UI components for tasks, collaboration hub, fees, marketplace, notifications
@@ -57,6 +58,7 @@ This approach enabled fast iteration from core task management into collaboratio
 - students can now resume checkout, verify provider status, and only mark invoices paid after server-side reconciliation succeeds
 - provider webhooks can now auto-confirm matching online fee payments, while manual reconcile remains available as a fallback path
 - provider configuration stays in backend env settings so secret keys are never exposed in the frontend bundle
+- marketplace card orders now also create an internal escrow hold, track seller payout state, and release proceeds into the seller wallet only after buyer claim
 
 ## 3. Module-by-Module Build Workflow
 
@@ -87,6 +89,7 @@ This approach enabled fast iteration from core task management into collaboratio
 
 - built role-scoped feed with post/comment/reaction
 - enabled student posting capability while retaining scope control
+- added image/video attachments for posts and comments, including media-only updates with derived titles
 - integrated feed as first-class collab submodule
 
 ## 3.5 Fees Module
@@ -199,9 +202,9 @@ The next approved execution order is now:
 1. external AI provider integration for higher-quality transcript + summary outputs (implemented baseline)
 2. production-grade real-time call hardening and reliability controls (implemented baseline)
 3. real payment rail integration for fees and transaction reconciliation (implemented baseline)
-4. wallet/escrow foundation for marketplace negotiation and auction flows
-5. media-rich social/community expansion:
-   channels, threads, moderation depth, and photo/video upload support
+4. wallet/escrow foundation for marketplace negotiation and auction flows (implemented baseline)
+5. media-rich social/community expansion (implemented baseline):
+   photo/video upload is now live for posts/comments, while deeper channels, threading, and moderation intelligence remain next
 6. governance intelligence expansion:
    alerts, trend analytics, intervention signals, and drill-down reporting
 

@@ -19,6 +19,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - Student kanban board: `Todo`, `In Progress`, `Submitted`, `Done`
 - Courses workspace with CGPA overview, assessment tracking, and course deadlines
 - Fees workspace with manual receipt confirmation plus optional provider-backed online checkout
+- Community feed with role-safe posts, reactions, comments, and photo/video attachments
 - Learning Summary required for submitted tasks
 - Grade + feedback workflow with grade-weighted progress
 - Multi-student task assignment for governance roles
@@ -133,7 +134,11 @@ Frontend defaults to `http://localhost:5173`.
 - `POST /fees/payments/:id/reconcile`
 - `POST /fees/payment-provider/webhook`
 - `POST /market/orders`
+- `GET /market/wallet`
+- `GET /market/wallet/transactions`
 - `GET /feed/posts`
+- `POST /feed/posts`
+- `POST /feed/posts/:id/comments`
 - `POST /ai/meeting-summary`
 - `GET /ai/meeting-summary/status`
 - `POST /ai/meeting-transcript`
@@ -151,9 +156,12 @@ Frontend defaults to `http://localhost:5173`.
 - If the fee payment provider is configured, `on_platform` invoice payments now open a real online checkout flow, keep provider refs/status in payment history, and only mark invoices paid after server-side reconciliation.
 - If the provider also sends a signed success webhook to `/fees/payment-provider/webhook`, StudyFlow now auto-confirms the matching online fee payment and keeps manual verification as a fallback if webhook delivery is delayed.
 - Manual `transfer` and `cash` fee submissions now show when receipt evidence is ready, treat a pasted receipt URL as valid proof during submit, and work best with up to 3 images or short videos under 3MB each in the current secure upload flow.
+- Marketplace card orders now move through a wallet-backed escrow hold: seller proceeds sit in pending wallet balance during handoff, then become available in the seller wallet only after the buyer completes the claim-code step.
+- Community feed posts and comments now support image/video attachments, including media-only updates that still stay visible through the normal thread and comment flow.
 - Collaboration calls now include device/link preflight checks plus explicit embedded/window rejoin actions so interrupted meetings can recover faster without dropping the current draft.
 - Large meeting-media transcription now runs through async backend jobs, and the collaboration workspace polls those jobs so completed transcripts can automatically refresh the saved summary and suggested tasks.
 - Meeting summaries now keep AI task review history, so accepted, rejected, edited, and synced suggestions are still visible when the same meeting is reopened later.
+- Heavy role dashboards and module workspaces now lazy-load, so the production client is split into smaller role/module bundles instead of one oversized chunk.
 - `server/.env` is ignored by git via `server/.gitignore`.
 - Privileged role signups (`school`, `state`, `federal`) require configured signup keys.
 - Login/register endpoints use lightweight rate limiting (`AUTH_RATE_WINDOW_MS`, `AUTH_RATE_MAX_ATTEMPTS`).

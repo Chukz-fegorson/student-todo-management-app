@@ -51,6 +51,21 @@ export function createReviewDraft() {
   return { rating: 5, reviewText: "" };
 }
 
+export function createWalletSummary() {
+  return {
+    walletId: null,
+    userId: "",
+    availableBalanceKobo: 0,
+    availableBalanceNaira: 0,
+    pendingBalanceKobo: 0,
+    pendingBalanceNaira: 0,
+    lifetimeEarnedKobo: 0,
+    lifetimeEarnedNaira: 0,
+    lastTransactionAt: null,
+    updatedAt: null,
+  };
+}
+
 export const OTHER_CATEGORY_VALUE = "__other__";
 
 export function marketChipMeta(product) {
@@ -77,5 +92,33 @@ export function paymentModeLabel(mode) {
       return "Bank Transfer";
     default:
       return "Cash";
+  }
+}
+
+export function escrowStatusLabel(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "held":
+      return "Funds held in escrow";
+    case "released":
+      return "Escrow released";
+    case "refunded":
+      return "Escrow refunded";
+    default:
+      return "No escrow";
+  }
+}
+
+export function sellerPayoutStatusLabel(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "pending":
+      return "Pending seller wallet release";
+    case "available":
+      return "Available in seller wallet";
+    case "released":
+      return "Paid out";
+    case "refunded":
+      return "Refunded";
+    default:
+      return "Not applicable";
   }
 }

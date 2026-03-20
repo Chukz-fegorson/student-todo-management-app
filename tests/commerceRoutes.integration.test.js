@@ -551,6 +551,21 @@ function createMarketplacePool() {
     updated_at: "2026-03-19T10:00:00.000Z",
   };
   const orders = [];
+  const wallets = [];
+  const walletTransactions = [];
+
+  function mapOrderForQuery(order) {
+    return {
+      ...order,
+      buyer_name: buyer.name,
+      product_title: product.title,
+      seller_account_name: seller.bank_account_name,
+      seller_bank_name: seller.bank_name,
+      seller_account_number: seller.bank_account_number,
+      seller_name: seller.name,
+      state_name: product.state_name,
+    };
+  }
 
   async function query(sql, params = []) {
     const text = String(sql);
@@ -561,7 +576,7 @@ function createMarketplacePool() {
       };
     }
 
-    if (text.includes("INSERT INTO sf_market_orders")) {
+    if (text.includes("INSERT INTO sf_market_orders") && !text.includes("escrow_status")) {
       orders.push({
         buyer_name: buyer.name,
         buyer_payment_reference: params[9],
@@ -572,6 +587,10 @@ function createMarketplacePool() {
         claim_code_released_to_buyer_at: params[18],
         claimed_by_buyer_at: null,
         created_at: params[20],
+        escrow_funded_at: null,
+        escrow_hold_kobo: 0,
+        escrow_released_at: null,
+        escrow_status: "not_applicable",
         id: params[0],
         notes: params[19],
         payment_confirmed_at: params[17],
@@ -587,11 +606,55 @@ function createMarketplacePool() {
         seller_account_number: seller.bank_account_number,
         seller_name: seller.name,
         seller_net_kobo: params[12],
+        seller_payout_reference: null,
+        seller_payout_status: "not_applicable",
         seller_user_id: params[3],
         status: params[13],
         total_amount_kobo: params[6],
         unit_price_kobo: params[5],
         updated_at: params[21],
+      });
+      return { rows: [] };
+    }
+
+    if (text.includes("INSERT INTO sf_market_orders") && text.includes("escrow_status")) {
+      const createdAt = params[25];
+      orders.push({
+        buyer_name: buyer.name,
+        buyer_payment_reference: params[9],
+        buyer_user_id: params[2],
+        cash_confirmed_by_seller_at: params[16],
+        claim_code: params[14],
+        claim_code_generated_at: params[15],
+        claim_code_released_to_buyer_at: params[18],
+        claimed_by_buyer_at: null,
+        created_at: createdAt,
+        escrow_funded_at: params[21],
+        escrow_hold_kobo: params[20],
+        escrow_released_at: null,
+        escrow_status: params[19],
+        id: params[0],
+        notes: params[24],
+        payment_confirmed_at: params[17],
+        payment_mode: params[7],
+        payment_provider: params[8],
+        platform_fee_kobo: params[11],
+        platform_fee_rate_bps: params[10],
+        product_id: params[1],
+        product_title: product.title,
+        quantity: params[4],
+        seller_account_name: seller.bank_account_name,
+        seller_bank_name: seller.bank_name,
+        seller_account_number: seller.bank_account_number,
+        seller_name: seller.name,
+        seller_net_kobo: params[12],
+        seller_payout_reference: params[23],
+        seller_payout_status: params[22],
+        seller_user_id: params[3],
+        status: params[13],
+        total_amount_kobo: params[6],
+        unit_price_kobo: params[5],
+        updated_at: params[26],
       });
       return { rows: [] };
     }
@@ -602,10 +665,145 @@ function createMarketplacePool() {
       return { rows: [] };
     }
 
+    if (text.includes("FROM sf_market_wallets") && text.includes("WHERE user_id = $1")) {
+      return {
+        rows: wallets.filter((wallet) => wallet.user_id === params[0]).slice(0, 1),
+      };
+    }
+
+    if (text.includes("FROM sf_market_wallets") && text.includes("WHERE id = $1")) {
+      return {
+        rows: wallets.filter((wallet) => wallet.id === params[0]).slice(0, 1),
+      };
+    }
+
+    if (text.includes("INSERT INTO sf_market_wallets")) {
+      wallets.push({
+        available_balance_kobo: 0,
+        created_at: params[2],
+        id: params[0],
+        last_transaction_at: null,
+        lifetime_earned_kobo: 0,
+        pending_balance_kobo: 0,
+        updated_at: params[3],
+        user_id: params[1],
+      });
+      return { rows: [] };
+    }
+
+    if (text.includes("INSERT INTO sf_messages")) {
+      return { rows: [] };
+    }
+
+    if (text.includes("UPDATE sf_market_wallets") && text.includes("pending_balance_kobo = $1")) {
+      const wallet = wallets.find((entry) => entry.id === params[3]);
+      if (wallet) {
+        wallet.pending_balance_kobo = params[0];
+        wallet.last_transaction_at = params[1];
+        wallet.updated_at = params[2];
+      }
+      return { rows: [] };
+    }
+
+    if (text.includes("UPDATE sf_market_wallets") && text.includes("available_balance_kobo = $1")) {
+      const wallet = wallets.find((entry) => entry.id === params[5]);
+      if (wallet) {
+        wallet.available_balance_kobo = params[0];
+        wallet.pending_balance_kobo = params[1];
+        wallet.lifetime_earned_kobo = params[2];
+        wallet.last_transaction_at = params[3];
+        wallet.updated_at = params[4];
+      }
+      return { rows: [] };
+    }
+
+    if (text.includes("INSERT INTO sf_market_wallet_transactions")) {
+      walletTransactions.push({
+        amount_kobo: params[4],
+        balance_after_available_kobo: params[5],
+        balance_after_pending_kobo: params[6],
+        created_at: params[8],
+        direction: text.includes("'credit'") ? "credit" : "debit",
+        id: params[0],
+        note: params[7],
+        order_id: params[3],
+        transaction_type: text.includes("'escrow_release'")
+          ? "escrow_release"
+          : text.includes("'escrow_hold'")
+          ? "escrow_hold"
+          : "adjustment",
+        user_id: params[2],
+        wallet_id: params[1],
+      });
+      return { rows: [] };
+    }
+
+    if (
+      text.includes("FROM sf_market_wallet_transactions") &&
+      text.includes("WHERE user_id = $1")
+    ) {
+      return {
+        rows: walletTransactions
+          .filter((entry) => entry.user_id === params[0])
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      };
+    }
+
     if (text.includes("FROM sf_market_orders o") && text.includes("WHERE o.id = $1")) {
+      return {
+        rows: orders.filter((order) => order.id === params[0]).map(mapOrderForQuery),
+      };
+    }
+
+    if (text.includes("FROM sf_market_orders o") && text.includes("ORDER BY o.created_at DESC")) {
+      const actorId = params[0] || null;
+      return {
+        rows: [...orders]
+          .filter((order) =>
+            actorId
+              ? order.buyer_user_id === actorId || order.seller_user_id === actorId
+              : true
+          )
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .map(mapOrderForQuery),
+      };
+    }
+
+    if (text.includes("FROM sf_market_orders") && text.includes("WHERE id = $1")) {
       return {
         rows: orders.filter((order) => order.id === params[0]),
       };
+    }
+
+    if (
+      text.includes("UPDATE sf_market_orders") &&
+      text.includes("claim_code_released_to_buyer_at = $1")
+    ) {
+      const order = orders.find((entry) => entry.id === params[2]);
+      if (order) {
+        order.claim_code_released_to_buyer_at = params[0];
+        order.updated_at = params[1];
+      }
+      return { rows: [] };
+    }
+
+    if (
+      text.includes("UPDATE sf_market_orders") &&
+      text.includes("status = 'Completed'") &&
+      text.includes("escrow_status = CASE")
+    ) {
+      const order = orders.find((entry) => entry.id === params[3]);
+      if (order) {
+        order.status = "Completed";
+        order.claimed_by_buyer_at = params[0];
+        if (order.payment_mode === "card" && order.escrow_status === "held") {
+          order.escrow_status = "released";
+          order.escrow_released_at = params[1];
+          order.seller_payout_status = "available";
+        }
+        order.updated_at = params[2];
+      }
+      return { rows: [] };
     }
 
     throw new Error(`Unhandled marketplace query: ${text}`);
@@ -622,6 +820,227 @@ function createMarketplacePool() {
       release() {},
     }),
     query,
+  };
+}
+
+function createCommunityFeedPool() {
+  const school = {
+    id: "school-1",
+    lga_name: "Ikeja",
+    name: "Alpha Academy",
+    state_name: "Lagos",
+  };
+  const users = [
+    {
+      avatar_url: "",
+      email: "ada@example.com",
+      id: "user-1",
+      lga_name: "Ikeja",
+      name: "Ada Student",
+      role: ROLE.STUDENT,
+      school_id: school.id,
+      state_name: "Lagos",
+    },
+    {
+      avatar_url: "",
+      email: "jude@example.com",
+      id: "user-2",
+      lga_name: "Ikeja",
+      name: "Jude School",
+      role: ROLE.SCHOOL,
+      school_id: school.id,
+      state_name: "Lagos",
+    },
+  ];
+  const posts = [];
+  const comments = [];
+
+  function findUser(userId) {
+    return users.find((entry) => entry.id === userId) || null;
+  }
+
+  function mapPostForQuery(post) {
+    const author = findUser(post.author_user_id) || {};
+    return {
+      ...post,
+      author_avatar_url: author.avatar_url || "",
+      author_name: author.name || null,
+      author_role: author.role || null,
+      author_school_name: author.school_id === school.id ? school.name : null,
+      author_state_name: author.state_name || null,
+      comments_count: comments.filter((entry) => entry.post_id === post.id).length,
+      my_reaction: null,
+      reaction_summary: {},
+      reactions_count: 0,
+      scope_school_name: post.scope_school_id === school.id ? school.name : null,
+      scope_school_state_name:
+        post.scope_school_id === school.id ? school.state_name : null,
+    };
+  }
+
+  function mapCommentForQuery(comment) {
+    const author = findUser(comment.author_user_id) || {};
+    return {
+      ...comment,
+      author_name: author.name || null,
+      author_role: author.role || null,
+    };
+  }
+
+  return {
+    async query(sql, params = []) {
+      const text = String(sql);
+
+      if (
+        text.includes("FROM sf_users u") &&
+        text.includes("ORDER BY u.name ASC") &&
+        text.includes("LIMIT 1200")
+      ) {
+        const actorId = params[0];
+        const search = String(params[1] || "")
+          .replace(/^%|%$/g, "")
+          .toLowerCase();
+        return {
+          rows: users
+            .filter((entry) => entry.id !== actorId)
+            .filter((entry) => {
+              if (!search) return true;
+              return [
+                entry.name,
+                entry.email,
+                entry.role,
+                school.name,
+                entry.state_name,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+                .includes(search);
+            })
+            .map((entry) => ({
+              ...entry,
+              school_lga_name: school.lga_name,
+              school_name: entry.school_id === school.id ? school.name : null,
+              school_state_name:
+                entry.school_id === school.id ? school.state_name : null,
+            })),
+        };
+      }
+
+      if (
+        text.includes("SELECT id") &&
+        text.includes("FROM sf_users") &&
+        text.includes("id = ANY")
+      ) {
+        const ids = Array.isArray(params[0]) ? params[0] : [];
+        return {
+          rows: users.filter((entry) => ids.includes(entry.id)).map((entry) => ({
+            id: entry.id,
+          })),
+        };
+      }
+
+      if (text.includes("INSERT INTO sf_feed_posts")) {
+        posts.push({
+          author_user_id: params[1],
+          body: params[8],
+          created_at: params[10],
+          id: params[0],
+          media_urls: params[9],
+          scope_school_id: params[4],
+          scope_state_name: params[3],
+          scope_type: params[2],
+          title: params[7],
+          updated_at: params[11],
+          visibility_mode: params[5],
+          visibility_selected_user_ids: params[6],
+        });
+        return { rows: [] };
+      }
+
+      if (
+        text.includes("SELECT p.*, s.state_name AS scope_school_state_name") &&
+        text.includes("FROM sf_feed_posts p")
+      ) {
+        const post = posts.find((entry) => entry.id === params[0]);
+        return {
+          rows: post
+            ? [
+                {
+                  ...post,
+                  scope_school_state_name:
+                    post.scope_school_id === school.id ? school.state_name : null,
+                },
+              ]
+            : [],
+        };
+      }
+
+      if (
+        text.includes("WITH reaction_counts AS") &&
+        text.includes("FROM sf_feed_posts p")
+      ) {
+        return {
+          rows: [...posts]
+            .sort(
+              (a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )
+            .map(mapPostForQuery),
+        };
+      }
+
+      if (
+        text.includes("FROM sf_feed_posts p") &&
+        text.includes("JOIN sf_users u ON u.id = p.author_user_id") &&
+        text.includes("WHERE p.id = $1")
+      ) {
+        const post = posts.find((entry) => entry.id === params[0]);
+        return {
+          rows: post ? [mapPostForQuery(post)] : [],
+        };
+      }
+
+      if (text.includes("INSERT INTO sf_feed_comments")) {
+        comments.push({
+          author_user_id: params[2],
+          body: params[3],
+          created_at: params[5],
+          id: params[0],
+          media_urls: params[4],
+          post_id: params[1],
+          updated_at: params[6],
+        });
+        return { rows: [] };
+      }
+
+      if (
+        text.includes("FROM sf_feed_comments c") &&
+        text.includes("WHERE c.post_id = $1")
+      ) {
+        return {
+          rows: comments
+            .filter((entry) => entry.post_id === params[0])
+            .sort(
+              (a, b) =>
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+            .map(mapCommentForQuery),
+        };
+      }
+
+      if (
+        text.includes("FROM sf_feed_comments c") &&
+        text.includes("WHERE c.id = $1")
+      ) {
+        const comment = comments.find((entry) => entry.id === params[0]);
+        return {
+          rows: comment ? [mapCommentForQuery(comment)] : [],
+        };
+      }
+
+      throw new Error(`Unhandled community feed query: ${text}`);
+    },
   };
 }
 
@@ -1119,6 +1538,121 @@ test("marketplace routes create buyer orders and reject listing writes for state
   });
 });
 
+test("marketplace routes hold card orders in escrow and release seller wallet funds after buyer claim", async () => {
+  const pool = createMarketplacePool();
+
+  const buyerApp = createTestApp();
+  registerMarketplaceRoutes({
+    app: buyerApp,
+    pool,
+    auth: createStaticAuth({
+      id: "buyer-1",
+      name: "Ada Buyer",
+      role: ROLE.STUDENT,
+    }),
+    asyncRoute: (handler) => handler,
+    auditEvent: async () => {},
+    notifyUsers: async () => {},
+    requireRole,
+    ROLE,
+  });
+
+  const sellerApp = createTestApp();
+  registerMarketplaceRoutes({
+    app: sellerApp,
+    pool,
+    auth: createStaticAuth({
+      id: "seller-1",
+      name: "Seller Sam",
+      role: ROLE.STUDENT,
+    }),
+    asyncRoute: (handler) => handler,
+    auditEvent: async () => {},
+    notifyUsers: async () => {},
+    requireRole,
+    ROLE,
+  });
+
+  await withServer(buyerApp, async ({ request: buyerRequest }) => {
+    await withServer(sellerApp, async ({ request: sellerRequest }) => {
+      const orderResponse = await buyerRequest("/market/orders", {
+        body: {
+          paymentMode: "card",
+          productId: "product-1",
+          quantity: 1,
+        },
+        method: "POST",
+      });
+      assert.equal(orderResponse.status, 201);
+      assert.equal(orderResponse.body.paymentMode, "card");
+      assert.equal(orderResponse.body.status, "CashConfirmed");
+      assert.equal(orderResponse.body.escrowStatus, "held");
+      assert.equal(orderResponse.body.sellerPayoutStatus, "pending");
+      assert.equal(orderResponse.body.paymentProvider, "studyflow_escrow");
+      assert.equal(orderResponse.body.claimCode, null);
+
+      const sellerWalletHeld = await sellerRequest("/market/wallet");
+      assert.equal(sellerWalletHeld.status, 200);
+      assert.equal(sellerWalletHeld.body.availableBalanceKobo, 0);
+      assert.equal(sellerWalletHeld.body.pendingBalanceKobo, 343000);
+
+      const sellerWalletTransactionsHeld = await sellerRequest(
+        "/market/wallet/transactions"
+      );
+      assert.equal(sellerWalletTransactionsHeld.status, 200);
+      assert.equal(sellerWalletTransactionsHeld.body.length, 1);
+      assert.equal(sellerWalletTransactionsHeld.body[0].transactionType, "escrow_hold");
+
+      const sellerOrdersBeforeRelease = await sellerRequest("/market/orders");
+      assert.equal(sellerOrdersBeforeRelease.status, 200);
+      assert.equal(sellerOrdersBeforeRelease.body.length, 1);
+      assert.equal(typeof sellerOrdersBeforeRelease.body[0].claimCode, "string");
+
+      const releaseResponse = await sellerRequest(
+        `/market/orders/${orderResponse.body.id}/release-claim-code`,
+        {
+          method: "POST",
+        }
+      );
+      assert.equal(releaseResponse.status, 200);
+
+      const buyerOrdersAfterRelease = await buyerRequest("/market/orders");
+      assert.equal(buyerOrdersAfterRelease.status, 200);
+      assert.equal(buyerOrdersAfterRelease.body.length, 1);
+      assert.equal(buyerOrdersAfterRelease.body[0].claimCodeReleasedAt !== null, true);
+      assert.equal(typeof buyerOrdersAfterRelease.body[0].claimCode, "string");
+
+      const buyerClaimResponse = await buyerRequest(
+        `/market/orders/${orderResponse.body.id}/buyer-claim`,
+        {
+          body: {
+            claimCode: buyerOrdersAfterRelease.body[0].claimCode,
+          },
+          method: "POST",
+        }
+      );
+      assert.equal(buyerClaimResponse.status, 200);
+      assert.equal(buyerClaimResponse.body.status, "Completed");
+
+      const sellerWalletReleased = await sellerRequest("/market/wallet");
+      assert.equal(sellerWalletReleased.status, 200);
+      assert.equal(sellerWalletReleased.body.availableBalanceKobo, 343000);
+      assert.equal(sellerWalletReleased.body.pendingBalanceKobo, 0);
+      assert.equal(sellerWalletReleased.body.lifetimeEarnedKobo, 343000);
+
+      const sellerWalletTransactionsReleased = await sellerRequest(
+        "/market/wallet/transactions"
+      );
+      assert.equal(sellerWalletTransactionsReleased.status, 200);
+      assert.equal(sellerWalletTransactionsReleased.body.length, 2);
+      assert.equal(
+        sellerWalletTransactionsReleased.body[0].transactionType,
+        "escrow_release"
+      );
+    });
+  });
+});
+
 test("community routes return audience users and still require authentication", async () => {
   const pool = {
     async query(sql) {
@@ -1191,5 +1725,83 @@ test("community routes return audience users and still require authentication", 
     const response = await request("/feed/audience/users");
     assert.equal(response.status, 401);
     assert.deepEqual(response.body, { error: "Unauthorized" });
+  });
+});
+
+test("community routes create media posts and media comments end to end", async () => {
+  const pool = createCommunityFeedPool();
+  const app = createTestApp();
+
+  registerCommunityRoutes({
+    app,
+    pool,
+    auth: createStaticAuth({
+      id: "user-1",
+      name: "Ada Student",
+      role: ROLE.STUDENT,
+      school_id: "school-1",
+      state_name: "Lagos",
+    }),
+    asyncRoute: (handler) => handler,
+    requireRole,
+    ROLE,
+  });
+
+  await withServer(app, async ({ request }) => {
+    const createPostResponse = await request("/feed/posts", {
+      body: {
+        body: "",
+        mediaUrls: [
+          {
+            kind: "image",
+            name: "garden.png",
+            url: "data:image/png;base64,AAAA",
+          },
+        ],
+      },
+      method: "POST",
+    });
+    assert.equal(createPostResponse.status, 201);
+    assert.match(createPostResponse.body.title, /^Media update \d{4}-\d{2}-\d{2}$/);
+    assert.equal(createPostResponse.body.mediaUrls.length, 1);
+    assert.equal(createPostResponse.body.mediaUrls[0].kind, "image");
+
+    const postsResponse = await request("/feed/posts");
+    assert.equal(postsResponse.status, 200);
+    assert.equal(postsResponse.body.length, 1);
+    assert.equal(postsResponse.body[0].mediaUrls.length, 1);
+    assert.equal(postsResponse.body[0].commentsCount, 0);
+
+    const createCommentResponse = await request(
+      `/feed/posts/${createPostResponse.body.id}/comments`,
+      {
+        body: {
+          body: "",
+          mediaUrls: [
+            {
+              kind: "video",
+              name: "garden-walkthrough.mp4",
+              url: "data:video/mp4;base64,BBBB",
+            },
+          ],
+        },
+        method: "POST",
+      }
+    );
+    assert.equal(createCommentResponse.status, 201);
+    assert.equal(createCommentResponse.body.mediaUrls.length, 1);
+    assert.equal(createCommentResponse.body.mediaUrls[0].kind, "video");
+
+    const commentsResponse = await request(
+      `/feed/posts/${createPostResponse.body.id}/comments`
+    );
+    assert.equal(commentsResponse.status, 200);
+    assert.equal(commentsResponse.body.length, 1);
+    assert.equal(commentsResponse.body[0].mediaUrls.length, 1);
+    assert.equal(commentsResponse.body[0].mediaUrls[0].kind, "video");
+
+    const postsAfterCommentResponse = await request("/feed/posts");
+    assert.equal(postsAfterCommentResponse.status, 200);
+    assert.equal(postsAfterCommentResponse.body[0].commentsCount, 1);
   });
 });

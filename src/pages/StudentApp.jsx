@@ -1,8 +1,5 @@
-import CollaborationHubModal from "../components/CollaborationHubModal";
-import CoursesWorkspace from "../components/CoursesWorkspace";
+import { Suspense, lazy } from "react";
 import DeleteModal from "../components/DeleteModal";
-import FeesWorkspace from "../components/FeesWorkspace";
-import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
 import StudentTasksWorkspace from "../components/StudentTasksWorkspace";
 import TodoModal from "../components/TodoModal";
 import WorkspaceOnboarding from "../components/WorkspaceOnboarding";
@@ -10,6 +7,25 @@ import {
   STUDENT_MODULE_TABS,
   useStudentWorkspace,
 } from "../hooks/useStudentWorkspace";
+
+const CollaborationHubModal = lazy(
+  () => import("../components/CollaborationHubModal")
+);
+const CoursesWorkspace = lazy(() => import("../components/CoursesWorkspace"));
+const FeesWorkspace = lazy(() => import("../components/FeesWorkspace"));
+const MarketplaceWorkspace = lazy(
+  () => import("../components/MarketplaceWorkspace")
+);
+
+function ModuleFallback({ title }) {
+  return (
+    <div className="empty">
+      <div className="empty-icon">...</div>
+      <h3>{title}</h3>
+      <p>StudyFlow is preparing this module.</p>
+    </div>
+  );
+}
 
 // StudentApp is the student's "home room":
 // tasks, collaboration, fees, and marketplace all live here as module tabs.
@@ -104,15 +120,19 @@ export default function StudentApp({
 
           {error && <div className="error-msg">{error}</div>}
 
-          {view === "courses" ? (
-            <CoursesWorkspace user={user} navRoute={navRoute} />
-          ) : view === "fees" ? (
-            <FeesWorkspace user={user} navRoute={navRoute} />
-          ) : view === "market" ? (
-            <MarketplaceWorkspace user={user} navRoute={navRoute} />
-          ) : (
-            <CollaborationHubModal user={user} embedded navRoute={navRoute} />
-          )}
+          <Suspense
+            fallback={<ModuleFallback title={`Loading ${activeModule.title}`} />}
+          >
+            {view === "courses" ? (
+              <CoursesWorkspace user={user} navRoute={navRoute} />
+            ) : view === "fees" ? (
+              <FeesWorkspace user={user} navRoute={navRoute} />
+            ) : view === "market" ? (
+              <MarketplaceWorkspace user={user} navRoute={navRoute} />
+            ) : (
+              <CollaborationHubModal user={user} embedded navRoute={navRoute} />
+            )}
+          </Suspense>
         </>
       )}
 

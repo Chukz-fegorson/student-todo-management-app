@@ -8,6 +8,18 @@ import {
 import { apiGet, apiPost, apiPut } from "../lib/api";
 import { formatDateTime } from "../lib/helpers";
 import { ROLE_LABELS } from "../lib/constants";
+import {
+  FEED_COMMENT_MEDIA_MAX_ITEMS,
+  FEED_MEDIA_MAX_BYTES,
+  FEED_MEDIA_MAX_PAYLOAD_CHARS,
+  FEED_POST_MEDIA_MAX_ITEMS,
+  createFeedCommentDraft,
+  createFeedPostForm,
+  feedMediaKindFromUrl,
+  deriveFeedTitle,
+  estimateFeedMediaPayloadChars,
+  feedMediaKindFromFile,
+} from "../lib/communityFeed";
 
 const REACTIONS = ["like", "love", "insightful", "support"];
 const PRIVACY_OPTIONS = [
@@ -91,21 +103,19 @@ function privacyLabel(mode, count = 0) {
   return "Everyone";
 }
 
-function deriveTitle(title, body) {
-  const explicit = String(title || "").trim();
-  if (explicit) return explicit.slice(0, 240);
-
-  const summary = String(body || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, 80);
-  return summary || "Community update";
-}
-
 function sortNewest(items = []) {
   return [...items].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read media file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function CommunityFeedPanel({ user }) {
@@ -125,12 +135,7 @@ export default function CommunityFeedPanel({ user }) {
   const [composerAudienceSearch, setComposerAudienceSearch] = useState("");
   const [editorAudienceSearch, setEditorAudienceSearch] = useState("");
 
-  const [postForm, setPostForm] = useState({
-    title: "",
-    body: "",
-    visibilityMode: "everyone",
-    visibilitySelectedUserIds: [],
-  });
+  const [postForm, setPostForm] = useState(() => createFeedPostForm());
   const [privacyDrafts, setPrivacyDrafts] = useState({});
   const [commentDrafts, setCommentDrafts] = useState({});
 
@@ -187,6 +192,11 @@ export default function CommunityFeedPanel({ user }) {
   }, [activePrivacyDraft, audienceUsers, deferredEditorAudienceSearch]);
 
   const canCreatePost = true;
+
+  const getCommentDraft = useCallback(
+    (postId) => commentDrafts[postId] || createFeedCommentDraft(),
+    [commentDrafts]
+  );
 
   const loadPosts = useCallback(async () => {
     try {
@@ -260,6 +270,194 @@ export default function CommunityFeedPanel({ user }) {
     }
   }, [activePostId, filteredPosts]);
 
+  function updateCommentDraft(postId, patch) {
+    setCommentDrafts((prev) => ({
+      ...prev,
+      [postId]: {
+        ...createFeedCommentDraft(),
+        ...(prev[postId] || {}),
+        ...patch,
+      },
+    }));
+  }
+
+  async function addComposerMediaFiles(event) {
+    const input = event.target;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    try {
+      setBusy(true);
+      setError("");
+      let nextMedia = [...postForm.mediaUrls];
+      let addedCount = 0;
+      let skippedCount = 0;
+
+      for (const file of files.slice(0, FEED_POST_MEDIA_MAX_ITEMS)) {
+        if (nextMedia.length >= FEED_POST_MEDIA_MAX_ITEMS) {
+          skippedCount += 1;
+          continue;
+        }
+        if (file.size > FEED_MEDIA_MAX_BYTES) {
+          skippedCount += 1;
+          continue;
+        }
+        const dataUrl = await fileToDataUrl(file);
+        if (
+          estimateFeedMediaPayloadChars(nextMedia) + dataUrl.length >
+          FEED_MEDIA_MAX_PAYLOAD_CHARS
+        ) {
+          skippedCount += 1;
+          continue;
+        }
+        nextMedia = [
+          ...nextMedia,
+          {
+            id: window.crypto.randomUUID(),
+            kind: feedMediaKindFromFile(file),
+            url: dataUrl,
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+          },
+        ];
+        addedCount += 1;
+      }
+
+      if (!addedCount) {
+        setError(
+          "No valid media was added. Use images or short videos under 3MB each."
+        );
+        return;
+      }
+
+      setPostForm((prev) => ({
+        ...prev,
+        mediaUrls: nextMedia,
+      }));
+
+      if (skippedCount) {
+        setNotice(
+          `Added ${addedCount} media item${addedCount === 1 ? "" : "s"}. ${skippedCount} file${skippedCount === 1 ? "" : "s"} could not be included because of the current size or count limits.`
+        );
+      }
+    } catch (err) {
+      setError(err.message || "Failed to add post media.");
+    } finally {
+      setBusy(false);
+      input.value = "";
+    }
+  }
+
+  function addComposerMediaUrl() {
+    const url = String(postForm.mediaUrlDraft || "").trim();
+    if (!url) return;
+    if (postForm.mediaUrls.length >= FEED_POST_MEDIA_MAX_ITEMS) {
+      setError("Remove one media item before adding another media URL.");
+      return;
+    }
+    setPostForm((prev) => ({
+      ...prev,
+      mediaUrls: [
+        ...prev.mediaUrls,
+        {
+          id: window.crypto.randomUUID(),
+          kind: feedMediaKindFromUrl(url),
+          url,
+        },
+      ],
+      mediaUrlDraft: "",
+    }));
+  }
+
+  function removeComposerMedia(mediaId) {
+    setPostForm((prev) => ({
+      ...prev,
+      mediaUrls: prev.mediaUrls.filter((entry) => entry.id !== mediaId),
+    }));
+  }
+
+  async function addCommentMediaFiles(postId, event) {
+    const input = event.target;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    try {
+      setBusy(true);
+      setError("");
+      let nextMedia = [...getCommentDraft(postId).mediaUrls];
+      let addedCount = 0;
+
+      for (const file of files.slice(0, FEED_COMMENT_MEDIA_MAX_ITEMS)) {
+        if (nextMedia.length >= FEED_COMMENT_MEDIA_MAX_ITEMS) break;
+        if (file.size > FEED_MEDIA_MAX_BYTES) continue;
+        const dataUrl = await fileToDataUrl(file);
+        if (
+          estimateFeedMediaPayloadChars(nextMedia) + dataUrl.length >
+          FEED_MEDIA_MAX_PAYLOAD_CHARS
+        ) {
+          continue;
+        }
+        nextMedia = [
+          ...nextMedia,
+          {
+            id: window.crypto.randomUUID(),
+            kind: feedMediaKindFromFile(file),
+            url: dataUrl,
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+          },
+        ];
+        addedCount += 1;
+      }
+
+      if (!addedCount) {
+        setError(
+          "No valid comment media was added. Use images or short videos under 3MB each."
+        );
+        return;
+      }
+
+      updateCommentDraft(postId, {
+        mediaUrls: nextMedia,
+      });
+    } catch (err) {
+      setError(err.message || "Failed to add comment media.");
+    } finally {
+      setBusy(false);
+      input.value = "";
+    }
+  }
+
+  function addCommentMediaUrl(postId) {
+    const draft = getCommentDraft(postId);
+    const url = String(draft.mediaUrlDraft || "").trim();
+    if (!url) return;
+    if (draft.mediaUrls.length >= FEED_COMMENT_MEDIA_MAX_ITEMS) {
+      setError("Remove one media item before adding another comment media URL.");
+      return;
+    }
+    updateCommentDraft(postId, {
+      mediaUrls: [
+        ...draft.mediaUrls,
+        {
+          id: window.crypto.randomUUID(),
+          kind: feedMediaKindFromUrl(url),
+          url,
+        },
+      ],
+      mediaUrlDraft: "",
+    });
+  }
+
+  function removeCommentMedia(postId, mediaId) {
+    const draft = getCommentDraft(postId);
+    updateCommentDraft(postId, {
+      mediaUrls: draft.mediaUrls.filter((entry) => entry.id !== mediaId),
+    });
+  }
+
   function toggleComposerAudience(userId) {
     setPostForm((prev) => ({
       ...prev,
@@ -312,12 +510,12 @@ export default function CommunityFeedPanel({ user }) {
   }
 
   async function createPost() {
-    const title = deriveTitle(postForm.title, postForm.body);
     const body = String(postForm.body || "").trim();
-    if (!body) {
-      setError("Post message is required.");
+    if (!body && !postForm.mediaUrls.length) {
+      setError("Post message or media is required.");
       return;
     }
+    const title = deriveFeedTitle(postForm.title, postForm.body, postForm.mediaUrls.length);
 
     try {
       setBusy(true);
@@ -327,13 +525,9 @@ export default function CommunityFeedPanel({ user }) {
         body,
         visibilityMode: postForm.visibilityMode,
         visibilitySelectedUserIds: postForm.visibilitySelectedUserIds,
+        mediaUrls: postForm.mediaUrls,
       });
-      setPostForm({
-        title: "",
-        body: "",
-        visibilityMode: "everyone",
-        visibilitySelectedUserIds: [],
-      });
+      setPostForm(createFeedPostForm());
       setComposerAudienceSearch("");
       setNotice("Post published to the live timeline.");
       await loadPosts();
@@ -381,14 +575,21 @@ export default function CommunityFeedPanel({ user }) {
   }
 
   async function sendComment(postId) {
-    const body = String(commentDrafts[postId] || "").trim();
-    if (!body) return;
+    const draft = getCommentDraft(postId);
+    const body = String(draft.body || "").trim();
+    if (!body && !draft.mediaUrls.length) {
+      setError("Comment text or media is required.");
+      return;
+    }
 
     try {
       setBusy(true);
       setError("");
-      await apiPost(`/feed/posts/${postId}/comments`, { body });
-      setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
+      await apiPost(`/feed/posts/${postId}/comments`, {
+        body,
+        mediaUrls: draft.mediaUrls,
+      });
+      updateCommentDraft(postId, createFeedCommentDraft());
       await loadPosts();
       await loadComments(postId);
     } catch (err) {
@@ -397,6 +598,10 @@ export default function CommunityFeedPanel({ user }) {
       setBusy(false);
     }
   }
+
+  const activeCommentDraft = activePost
+    ? getCommentDraft(activePost.id)
+    : createFeedCommentDraft();
 
   if (loading) return <div className="empty-col">Loading community timeline...</div>;
 
@@ -509,8 +714,21 @@ export default function CommunityFeedPanel({ user }) {
                   )}
                 </div>
 
-                <div className="feed-post-title">{post.title}</div>
-                <div className="feed-post-body">{post.body}</div>
+                {!!post.title && <div className="feed-post-title">{post.title}</div>}
+                {!!post.body && <div className="feed-post-body">{post.body}</div>}
+                {!!post.mediaUrls?.length && (
+                  <div className="feed-media-grid feed-media-grid-compact">
+                    {post.mediaUrls.map((item) => (
+                      <div key={item.id} className="feed-media-item">
+                        {item.kind === "video" ? (
+                          <video src={item.url} controls preload="metadata" />
+                        ) : (
+                          <img src={item.url} alt={item.name || post.title || "Post media"} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="feed-post-stats">
                   <span>{post.reactionsCount || 0} reactions</span>
@@ -568,6 +786,58 @@ export default function CommunityFeedPanel({ user }) {
                 }
                 placeholder="Share an update, ask a question, or start a discussion..."
               />
+            </div>
+
+            <div className="field">
+              <label>Media (optional)</label>
+              <div className="profile-image-row">
+                <input
+                  value={postForm.mediaUrlDraft}
+                  placeholder="Paste image or video URL"
+                  onChange={(event) =>
+                    setPostForm((prev) => ({
+                      ...prev,
+                      mediaUrlDraft: event.target.value,
+                    }))
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={addComposerMediaUrl}
+                >
+                  Add URL
+                </button>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  onChange={addComposerMediaFiles}
+                />
+              </div>
+              <div className="panel-hint">
+                Add up to {FEED_POST_MEDIA_MAX_ITEMS} images or short videos under 3MB each.
+              </div>
+              {!!postForm.mediaUrls.length && (
+                <div className="feed-media-grid" style={{ marginTop: "0.6rem" }}>
+                  {postForm.mediaUrls.map((item) => (
+                    <div key={item.id} className="feed-media-item">
+                      {item.kind === "video" ? (
+                        <video src={item.url} controls preload="metadata" />
+                      ) : (
+                        <img src={item.url} alt={item.name || "Post media"} />
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => removeComposerMedia(item.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="field">
@@ -668,7 +938,22 @@ export default function CommunityFeedPanel({ user }) {
                 </div>
               </div>
 
-              <div className="review-summary-box">{activePost.body}</div>
+              {!!activePost.body && (
+                <div className="review-summary-box">{activePost.body}</div>
+              )}
+              {!!activePost.mediaUrls?.length && (
+                <div className="feed-media-grid" style={{ marginTop: "0.8rem" }}>
+                  {activePost.mediaUrls.map((item) => (
+                    <div key={item.id} className="feed-media-item">
+                      {item.kind === "video" ? (
+                        <video src={item.url} controls preload="metadata" />
+                      ) : (
+                        <img src={item.url} alt={item.name || activePost.title || "Post media"} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {activePrivacyDraft && (
                 <div className="feed-privacy-editor">
@@ -768,7 +1053,23 @@ export default function CommunityFeedPanel({ user }) {
                       <span>{ROLE_LABELS[comment.authorRole] || comment.authorRole || "User"}</span>
                       <span>{formatDateTime(comment.createdAt)}</span>
                     </div>
-                    <div className="feed-comment-body">{comment.body}</div>
+                    {!!comment.body && <div className="feed-comment-body">{comment.body}</div>}
+                    {!!comment.mediaUrls?.length && (
+                      <div className="feed-media-grid feed-media-grid-compact">
+                        {comment.mediaUrls.map((item) => (
+                          <div key={item.id} className="feed-media-item">
+                            {item.kind === "video" ? (
+                              <video src={item.url} controls preload="metadata" />
+                            ) : (
+                              <img
+                                src={item.url}
+                                alt={item.name || "Comment media"}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {!commentsByPost[activePost.id]?.length && (
@@ -777,16 +1078,64 @@ export default function CommunityFeedPanel({ user }) {
               </div>
 
               <div className="feed-comment-compose">
-                <input
-                  placeholder="Write a comment..."
-                  value={commentDrafts[activePost.id] || ""}
-                  onChange={(event) =>
-                    setCommentDrafts((prev) => ({
-                      ...prev,
-                      [activePost.id]: event.target.value,
-                    }))
-                  }
-                />
+                <div className="feed-comment-compose-shell">
+                  <input
+                    placeholder="Write a comment..."
+                    value={activeCommentDraft.body}
+                    onChange={(event) =>
+                      updateCommentDraft(activePost.id, {
+                        body: event.target.value,
+                      })
+                    }
+                  />
+                  <div className="profile-image-row">
+                    <input
+                      value={activeCommentDraft.mediaUrlDraft}
+                      placeholder="Paste image or video URL"
+                      onChange={(event) =>
+                        updateCommentDraft(activePost.id, {
+                          mediaUrlDraft: event.target.value,
+                        })
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => addCommentMediaUrl(activePost.id)}
+                    >
+                      Add URL
+                    </button>
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={(event) => addCommentMediaFiles(activePost.id, event)}
+                    />
+                  </div>
+                  <div className="panel-hint">
+                    Add up to {FEED_COMMENT_MEDIA_MAX_ITEMS} media items to a comment.
+                  </div>
+                  {!!activeCommentDraft.mediaUrls.length && (
+                    <div className="feed-media-grid feed-media-grid-compact">
+                      {activeCommentDraft.mediaUrls.map((item) => (
+                        <div key={item.id} className="feed-media-item">
+                          {item.kind === "video" ? (
+                            <video src={item.url} controls preload="metadata" />
+                          ) : (
+                            <img src={item.url} alt={item.name || "Comment media"} />
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => removeCommentMedia(activePost.id, item.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   className="btn btn-primary btn-sm"
                   disabled={busy}

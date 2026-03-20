@@ -2,8 +2,10 @@ import { formatDateTime } from "../lib/helpers";
 import {
   OTHER_CATEGORY_VALUE,
   asNaira,
+  escrowStatusLabel,
   marketChipMeta,
   paymentModeLabel,
+  sellerPayoutStatusLabel,
 } from "../lib/marketplace";
 import { useMarketplaceWorkspace } from "../hooks/useMarketplaceWorkspace";
 
@@ -75,6 +77,8 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
     setSellerVerification,
     switchMarketView,
     updateClaimCode,
+    walletSummary,
+    walletTransactions,
   } = useMarketplaceWorkspace({ user, navRoute });
 
   if (loading) {
@@ -575,10 +579,77 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
       {marketView === "orders" && (
         <>
           <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
+            <div className="panel-kicker">Wallet</div>
+            <div className="panel-title">Marketplace Wallet</div>
+            <div className="panel-copy">
+              Card checkout seller proceeds now move through a wallet-backed escrow hold before they become available after buyer claim.
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
+              <div className="review-summary-box">
+                <strong>Available</strong>
+                <div style={{ marginTop: "0.35rem" }}>
+                  N{Number(walletSummary.availableBalanceNaira || 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="review-summary-box">
+                <strong>Pending Escrow</strong>
+                <div style={{ marginTop: "0.35rem" }}>
+                  N{Number(walletSummary.pendingBalanceNaira || 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="review-summary-box">
+                <strong>Lifetime Earned</strong>
+                <div style={{ marginTop: "0.35rem" }}>
+                  N{Number(walletSummary.lifetimeEarnedNaira || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+            {walletSummary.lastTransactionAt ? (
+              <div className="calendar-meta" style={{ marginTop: "0.6rem" }}>
+                Last wallet movement: {formatDateTime(walletSummary.lastTransactionAt)}
+              </div>
+            ) : (
+              <div className="calendar-meta" style={{ marginTop: "0.6rem" }}>
+                No wallet activity yet.
+              </div>
+            )}
+            {!!walletTransactions.length && (
+              <div className="calendar-list" style={{ marginTop: "0.85rem" }}>
+                {walletTransactions.slice(0, 4).map((entry) => (
+                  <div key={entry.id} className="calendar-item">
+                    <div>
+                      <div className="calendar-title">
+                        {entry.transactionType === "escrow_hold"
+                          ? "Escrow hold"
+                          : entry.transactionType === "escrow_release"
+                          ? "Escrow release"
+                          : entry.transactionType}
+                      </div>
+                      <div className="calendar-meta">
+                        {entry.note || "Marketplace wallet movement"} |{" "}
+                        {formatDateTime(entry.createdAt)}
+                      </div>
+                    </div>
+                    <div className="calendar-meta">
+                      N{Number(entry.amountNaira || 0).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="panel panel-elevated" style={{ marginTop: "1rem" }}>
         <div className="panel-kicker">Orders</div>
         <div className="panel-title">Active Orders ({activeOrders.length})</div>
         <div className="panel-copy">
-          Track payment confirmation, claim codes, disputes, and delivery flow without leaving the order stream.
+          Track payment confirmation, escrow state, claim codes, disputes, and delivery flow without leaving the order stream.
         </div>
         <div className="calendar-list">
           {activeOrders.map((order) => {
@@ -606,6 +677,15 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                       ? ` | Buyer Ref: ${order.buyerPaymentReference}`
                       : ""}
                   </div>
+                  {order.paymentMode === "card" && (
+                    <div className="calendar-meta">
+                      Escrow: {escrowStatusLabel(order.escrowStatus)} | Payout:{" "}
+                      {sellerPayoutStatusLabel(order.sellerPayoutStatus)}
+                      {order.escrowFundedAt
+                        ? ` | Escrow funded: ${formatDateTime(order.escrowFundedAt)}`
+                        : ""}
+                    </div>
+                  )}
                   {order.paymentConfirmedAt && (
                     <div className="calendar-meta">
                       {order.paymentMode === "card"
@@ -648,7 +728,7 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                     order.status === "CashConfirmed" &&
                     !order.claimCodeReleasedAt && (
                       <div className="calendar-meta">
-                        Payment is cleared. Waiting for seller to release your claim code after handoff.
+                        Payment is cleared and held in escrow. Waiting for seller to release your claim code after handoff.
                       </div>
                     )}
                   {isBuyer &&
@@ -742,6 +822,9 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                       : ""}
                     {order.paymentConfirmedAt
                       ? ` | Payment Confirmed: ${formatDateTime(order.paymentConfirmedAt)}`
+                      : ""}
+                    {order.paymentMode === "card"
+                      ? ` | Escrow: ${escrowStatusLabel(order.escrowStatus)}`
                       : ""}
                     {order.claimedAt ? ` | Completed: ${formatDateTime(order.claimedAt)}` : ""}
                   </div>
@@ -956,8 +1039,9 @@ export default function MarketplaceWorkspace({ user, navRoute }) {
                     )}
                     {purchasePaymentMode === "card" && (
                       <div className="review-summary-box" style={{ marginTop: "0.5rem" }}>
-                        StudyFlow Checkout clears payment instantly. The seller keeps the existing
-                        handoff flow by releasing your claim code after the item is ready.
+                        StudyFlow Checkout now funds marketplace escrow immediately. The seller
+                        still releases your claim code after handoff, and the escrow becomes
+                        available in the seller wallet only after you complete the buyer-claim step.
                       </div>
                     )}
                   </div>

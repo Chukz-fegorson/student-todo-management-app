@@ -1,10 +1,26 @@
-import CollaborationHubModal from "../components/CollaborationHubModal";
-import CoursesWorkspace from "../components/CoursesWorkspace";
-import FeesWorkspace from "../components/FeesWorkspace";
-import MarketplaceWorkspace from "../components/MarketplaceWorkspace";
+import { Suspense, lazy } from "react";
 import SchoolTasksWorkspace from "../components/SchoolTasksWorkspace";
 import WorkspaceOnboarding from "../components/WorkspaceOnboarding";
 import { useSchoolWorkspace } from "../hooks/useSchoolWorkspace";
+
+const CollaborationHubModal = lazy(
+  () => import("../components/CollaborationHubModal")
+);
+const CoursesWorkspace = lazy(() => import("../components/CoursesWorkspace"));
+const FeesWorkspace = lazy(() => import("../components/FeesWorkspace"));
+const MarketplaceWorkspace = lazy(
+  () => import("../components/MarketplaceWorkspace")
+);
+
+function ModuleFallback({ title }) {
+  return (
+    <div className="empty">
+      <div className="empty-icon">...</div>
+      <h3>{title}</h3>
+      <p>StudyFlow is preparing this module.</p>
+    </div>
+  );
+}
 
 // This dashboard is used by school, state, and federal roles.
 // It adapts behavior based on scope and permissions.
@@ -102,15 +118,19 @@ export default function SchoolDashboard({ user, navRoute, notificationSummary })
 
           {error && <div className="error-msg">{error}</div>}
 
-          {view === "courses" ? (
-            <CoursesWorkspace user={user} navRoute={navRoute} />
-          ) : view === "fees" ? (
-            <FeesWorkspace user={user} navRoute={navRoute} />
-          ) : view === "market" ? (
-            <MarketplaceWorkspace user={user} navRoute={navRoute} />
-          ) : (
-            <CollaborationHubModal user={user} embedded navRoute={navRoute} />
-          )}
+          <Suspense
+            fallback={<ModuleFallback title={`Loading ${activeModule.title}`} />}
+          >
+            {view === "courses" ? (
+              <CoursesWorkspace user={user} navRoute={navRoute} />
+            ) : view === "fees" ? (
+              <FeesWorkspace user={user} navRoute={navRoute} />
+            ) : view === "market" ? (
+              <MarketplaceWorkspace user={user} navRoute={navRoute} />
+            ) : (
+              <CollaborationHubModal user={user} embedded navRoute={navRoute} />
+            )}
+          </Suspense>
         </>
       )}
     </div>

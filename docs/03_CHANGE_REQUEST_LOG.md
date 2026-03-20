@@ -48,9 +48,9 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-028 | UX Redesign | Hide create-meeting form until user clicks create | Implemented | conditional form toggle implemented |
 | CR-029 | UX Redesign | Keep upcoming and past meetings visible | Implemented | meeting filter/list remains always visible |
 | CR-030 | Data Standardization | Standardize State/LGA/Gender inputs to dropdowns | Implemented | location data helper + auth/account dropdown conversion |
-| CR-031 | Strategic | Add wallet-backed auctions and bidding | Planned | not yet in backend domain model |
-| CR-032 | Strategic | Integrate external ChatGPT/Whisper APIs | Planned | current version uses local, zero-cost summarizer |
-| CR-033 | Strategic | Expand social graph to Slack/Twitter-like streams | Partially Implemented | community feed baseline exists; advanced threads pending |
+| CR-031 | Strategic | Add wallet-backed auctions and bidding | Partially Implemented | marketplace card orders now use wallet-backed escrow holds and seller wallet release states; auctions and bidding are still pending |
+| CR-032 | Strategic | Integrate external ChatGPT/Whisper APIs | Partially Implemented | collaboration summaries and uploaded meeting audio/video can now use an optional OpenAI-compatible provider, while the zero-cost local fallback remains available |
+| CR-033 | Strategic | Expand social graph to Slack/Twitter-like streams | Partially Implemented | community feed baseline exists and now supports media-rich posts/comments; advanced channels, threads, and moderation depth are still pending |
 | CR-034 | Reliability | Add audit event trail across auth/fees/marketplace lifecycle | Implemented | `sf_audit_events` schema + route-level audit hooks + `/audit/events` |
 | CR-035 | Governance | Add parent role and under-18 parent review linkage | Implemented | parent role, child link code flow, parent dashboard, parent review APIs |
 | CR-036 | Fees UX | Move payment initiation to explicit student "Pay Fees" flow | Implemented | student pay-action UX, method selection, receipt handling, receipt download |
@@ -75,6 +75,9 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-055 | Post-Phase-0 | Persist AI task review history inside each meeting record | Implemented | Collaboration now saves accepted, rejected, pending, edited, and synced task-review decisions with the meeting summary so reopening the same meeting restores review history instead of starting from a blank suggestion state |
 | CR-056 | Post-Phase-0 | Replace simulated on-platform fee payment with provider-backed checkout and reconciliation | Implemented | Fees now expose provider status plus checkout/reconcile endpoints, keep manual transfer/cash confirmation unchanged, store provider refs/status in `sf_fee_payments`, let students resume/verify online fee payments before invoices are marked paid, and auto-confirm matching signed provider webhooks |
 | CR-057 | Post-Phase-0 | Stabilize manual fee payment proof submission and school confirmation visibility | Implemented | The student fee card now shows receipt-readiness before submit, auto-includes a pasted receipt URL during manual submission, aligns file guidance with the secure JSON upload limits, and the transfer/cash proof flow now has dedicated end-to-end route coverage through school confirmation |
+| CR-058 | Post-Phase-0 | Add marketplace wallet/escrow groundwork for card checkout orders | Implemented | Marketplace card orders now create escrow-held seller proceeds, expose `/market/wallet` plus `/market/wallet/transactions`, keep escrow/payout state visible on order records, and release seller wallet funds only after buyer claim completes the claim-code handoff |
+| CR-059 | Post-Phase-0 | Expand community feed to support media-rich posts and comments | Implemented | Community feed posts/comments now accept image and video attachments, support media-only updates with derived titles, render preview grids in the UI, and carry route-level regression coverage for media persistence through thread reloads |
+| CR-060 | Performance | Resolve the oversized Vite client chunk without dropping existing modules | Implemented | `src/App.jsx`, `StudentApp.jsx`, and `SchoolDashboard.jsx` now lazy-load role dashboards, account settings, and heavy non-task workspaces so the production bundle is split by role/module and the Vite chunk warning is cleared |
 
 ## 4. Key Technical Change Highlights
 
@@ -85,6 +88,9 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 - Phase 0 frontend hardening is now active in production code through layered CSS plus dedicated student, school, course, fees, marketplace, and collaboration workspace seams
 - Phase 0 backend hardening is now active in production code through modular commerce/community route families and route-level integration coverage for the required high-value flows
 - post-Phase-0 payment hardening is now active in production code through provider-backed fee checkout, reconciliation metadata, and route-level lifecycle coverage
+- marketplace wallet/escrow groundwork is now active in production code through escrow-aware order records, seller wallet balances, wallet transaction history, and route-level claim-to-release coverage
+- media-rich community groundwork is now active in production code through image/video post/comment support, media-aware feed helpers, and route-level coverage for media persistence
+- frontend bundle health is now improved through lazy-loaded role dashboards and heavy workspace modules, bringing the main production chunk back below the Vite warning threshold
 
 ## 5. Audit Note
 

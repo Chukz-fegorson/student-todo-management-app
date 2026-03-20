@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { apiGet, apiPut } from "./lib/api";
 import { clearAllAuth, getSession, setSession } from "./lib/storage";
 import { ROLE_LABELS } from "./lib/constants";
-import AuthPage from "./pages/AuthPage";
-import StudentApp from "./pages/StudentApp";
-import SchoolDashboard from "./pages/SchoolDashboard";
-import ParentDashboard from "./pages/ParentDashboard";
-import AccountModal from "./components/AccountModal";
 import NotificationCenter from "./components/NotificationCenter";
 import CommandPalette from "./components/CommandPalette";
 import { NAVIGATION_EVENT, createNavigationIntent } from "./lib/navigation";
+
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const StudentApp = lazy(() => import("./pages/StudentApp"));
+const SchoolDashboard = lazy(() => import("./pages/SchoolDashboard"));
+const ParentDashboard = lazy(() => import("./pages/ParentDashboard"));
+const AccountModal = lazy(() => import("./components/AccountModal"));
 
 const SHELL_SUBTITLES = {
   student: "Know what needs attention next and keep momentum visible.",
@@ -47,6 +48,18 @@ const SHELL_FOCUS_AREAS = {
   state: ["School risk", "LGA hotspots", "Intervention queue"],
   federal: ["National signals", "State comparison", "Intervention priorities"],
 };
+
+function WorkspaceFallback({ title = "Loading workspace", message }) {
+  return (
+    <div className="main">
+      <div className="empty">
+        <div className="empty-icon">...</div>
+        <h3>{title}</h3>
+        <p>{message || "StudyFlow is preparing the next workspace."}</p>
+      </div>
+    </div>
+  );
+}
 
 // This is the "traffic controller" of the frontend.
 // It decides:
@@ -246,7 +259,19 @@ export default function App() {
     );
   }
 
-  if (!user) return <AuthPage onLogin={setUser} />;
+  if (!user) {
+    return (
+      <Suspense
+        fallback={
+          <div className="loading-screen">
+            <div className="loading-spinner" />
+          </div>
+        }
+      >
+        <AuthPage onLogin={setUser} />
+      </Suspense>
+    );
+  }
 
   function handleNavigate(route) {
     const next = createNavigationIntent(route);
@@ -381,36 +406,51 @@ export default function App() {
           </div>
         )}
 
-        {isStudent ? (
-          <StudentApp
-            user={user}
-            navRoute={navRoute}
-            onNavigate={handleNavigate}
-            notificationSummary={notificationSummary}
-          />
-        ) : isParent ? (
-          <ParentDashboard user={user} navRoute={navRoute} onNavigate={handleNavigate} />
-        ) : (
-          <SchoolDashboard
-            user={user}
-            navRoute={navRoute}
-            onNavigate={handleNavigate}
-            notificationSummary={notificationSummary}
-          />
-        )}
+        <Suspense
+          fallback={
+            <WorkspaceFallback
+              title="Loading your workspace"
+              message="StudyFlow is opening the role experience that matches this account."
+            />
+          }
+        >
+          {isStudent ? (
+            <StudentApp
+              user={user}
+              navRoute={navRoute}
+              onNavigate={handleNavigate}
+              notificationSummary={notificationSummary}
+            />
+          ) : isParent ? (
+            <ParentDashboard
+              user={user}
+              navRoute={navRoute}
+              onNavigate={handleNavigate}
+            />
+          ) : (
+            <SchoolDashboard
+              user={user}
+              navRoute={navRoute}
+              onNavigate={handleNavigate}
+              notificationSummary={notificationSummary}
+            />
+          )}
+        </Suspense>
       </div>
 
       {showAccountModal && (
-        <AccountModal
-          user={user}
-          busy={accountBusy}
-          error={accountError}
-          onSave={handleAccountSave}
-          onClose={() => {
-            setAccountError("");
-            setShowAccountModal(false);
-          }}
-        />
+        <Suspense fallback={null}>
+          <AccountModal
+            user={user}
+            busy={accountBusy}
+            error={accountError}
+            onSave={handleAccountSave}
+            onClose={() => {
+              setAccountError("");
+              setShowAccountModal(false);
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

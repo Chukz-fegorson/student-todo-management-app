@@ -20,6 +20,7 @@ StudyFlow is a role-based student task and learning tracking MVP with four roles
 - Courses workspace with CGPA overview, assessment tracking, and course deadlines
 - Fees workspace with manual receipt confirmation plus optional provider-backed online checkout
 - Community feed with role-safe posts, reactions, comments, and photo/video attachments
+- Governance intelligence with trend deltas, active alerts, and intervention queues for school/state/federal operators
 - Learning Summary required for submitted tasks
 - Grade + feedback workflow with grade-weighted progress
 - Multi-student task assignment for governance roles
@@ -126,6 +127,7 @@ Frontend defaults to `http://localhost:5173`.
 - `DELETE /tasks/:id`
 - `POST /tasks/:id/grade`
 - `GET /analytics/overview`
+- `GET /analytics/intelligence`
 - `GET /fees/plans`
 - `GET /fees/payment-provider/status`
 - `POST /fees/invoices/:id/mark-paid`
@@ -158,6 +160,7 @@ Frontend defaults to `http://localhost:5173`.
 - Manual `transfer` and `cash` fee submissions now show when receipt evidence is ready, treat a pasted receipt URL as valid proof during submit, and work best with up to 3 images or short videos under 3MB each in the current secure upload flow.
 - Marketplace card orders now move through a wallet-backed escrow hold: seller proceeds sit in pending wallet balance during handoff, then become available in the seller wallet only after the buyer completes the claim-code step.
 - Community feed posts and comments now support image/video attachments, including media-only updates that still stay visible through the normal thread and comment flow.
+- School, state, and federal task workspaces now include governance intelligence reporting with trend deltas, active alerts, and intervention drill-down rows for the highest-risk students or schools in scope.
 - Collaboration calls now include device/link preflight checks plus explicit embedded/window rejoin actions so interrupted meetings can recover faster without dropping the current draft.
 - Large meeting-media transcription now runs through async backend jobs, and the collaboration workspace polls those jobs so completed transcripts can automatically refresh the saved summary and suggested tasks.
 - Meeting summaries now keep AI task review history, so accepted, rejected, edited, and synced suggestions are still visible when the same meeting is reopened later.

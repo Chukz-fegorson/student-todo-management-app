@@ -27,6 +27,8 @@ This release log complements the deeper engineering trail in `docs/03_CHANGE_REQ
 - marketplace route coverage for card-order escrow funding and seller wallet release after buyer claim
 - reusable community feed media helpers for post/comment drafts, file limits, and title derivation
 - community route coverage for media-only posts and media-only comments across the feed lifecycle
+- governance intelligence reporting through `/analytics/intelligence` with trend deltas, scoped alerts, and intervention queues
+- governance route and service coverage for the new intelligence signals
 
 ### Changed
 
@@ -44,6 +46,7 @@ This release log complements the deeper engineering trail in `docs/03_CHANGE_REQ
 - marketplace card orders now fund a wallet-backed escrow hold, keep seller payout status on the order record, and release seller wallet proceeds only after buyer claim completes the handoff
 - community feed posts and comments can now carry image/video media, including media-only updates with derived titles, preview grids, and route-level persistence across thread reloads
 - the app shell now lazy-loads role dashboards, account settings, and heavy student/school workspace modules so the production build is split by role/module instead of shipping one oversized client chunk
+- school/state/federal task surfaces now show governance intelligence alongside the scorecard, including trend reporting, risk alerts, and drill-down intervention candidates for students or schools
 
 ### Fixed
 

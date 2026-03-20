@@ -82,7 +82,7 @@ flowchart LR
 | Capability | Current State | End Goal | Gap |
 |---|---|---|---|
 | Academic tasking and grading | Live | Fully optimized with AI-assisted pedagogy | medium |
-| Multi-role governance | Live | Advanced policy analytics + intervention automation | medium |
+| Multi-role governance | Live with intelligence alerts/trends/drill-down | Advanced policy analytics + intervention automation | medium |
 | Chat and broadcast | Live | Real-time, high-scale channels with richer thread models | medium |
 | Meetings + transcript + summary | Live (local AI pipeline) | External AI quality + enterprise recording controls | high |
 | Community feed | Live baseline with media posts/comments | Full social graph, topic channels, moderation intelligence | medium |
@@ -120,7 +120,7 @@ flowchart TD
 3. Add payment gateway integrations for online fee settlement and reconciliation.
 4. Extend wallet/escrow groundwork into auction bids, refunds, and richer marketplace settlement controls.
 5. Expand community from media-capable posts/comments into a richer channel/thread/topic model with stronger moderation tooling.
-6. Build governance intelligence layer for state/federal KPI, risk alerts, and intervention workflows.
+6. Deepen governance intelligence from live alerts/trends into fuller automation, policy workflows, and intervention escalation.
 
 ## 5.1 Active Implementation Order (Locked)
 
@@ -143,7 +143,7 @@ Execution status: completed for that cycle (March 6, 2026 baseline).
 2. External AI provider integration and collaboration quality uplift.
 3. Real payment rail integration and reconciliation.
 4. Media-rich social/community expansion with photo/video upload (implemented baseline).
-5. Governance intelligence expansion.
+5. Governance intelligence expansion (implemented baseline).
 6. Auction/refund settlement depth on top of wallet/escrow groundwork.
 
 ## 6. Product Positioning (Current Truth)

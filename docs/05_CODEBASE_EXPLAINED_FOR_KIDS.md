@@ -59,6 +59,7 @@ This is the teacher/school/governance control room.
 It:
 - uses a helper hook to load students, tasks, schools, analytics, and scorecards
 - uses a task workspace component for assigning, filtering, reviewing, and grading
+- now also shows intervention intelligence like trend shifts, active alerts, and a shortlist of the highest-risk students or schools
 - lets role users assign tasks to many students
 - switches between Tasks/Courses/Collab/Fees/Marketplace tabs
 

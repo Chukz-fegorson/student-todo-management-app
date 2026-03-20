@@ -75,6 +75,7 @@ This approach enabled fast iteration from core task management into collaboratio
 - enforced learning summary for submitted status
 - added grading and feedback flow
 - added role-scoped analytics and hierarchy-aware dashboards
+- expanded governance reporting from scorecards into intelligence signals with trend deltas, scoped alerts, and intervention queues
 
 ## 3.3 Collaboration Hub
 
@@ -205,8 +206,8 @@ The next approved execution order is now:
 4. wallet/escrow foundation for marketplace negotiation and auction flows (implemented baseline)
 5. media-rich social/community expansion (implemented baseline):
    photo/video upload is now live for posts/comments, while deeper channels, threading, and moderation intelligence remain next
-6. governance intelligence expansion:
-   alerts, trend analytics, intervention signals, and drill-down reporting
+6. governance intelligence expansion (implemented baseline):
+   alerts, trend analytics, intervention signals, and drill-down reporting are now live; deeper automation and workflow escalation remain next
 
 Detailed Phase 0 work breakdown now lives in:
 

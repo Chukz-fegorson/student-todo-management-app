@@ -78,6 +78,7 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 | CR-058 | Post-Phase-0 | Add marketplace wallet/escrow groundwork for card checkout orders | Implemented | Marketplace card orders now create escrow-held seller proceeds, expose `/market/wallet` plus `/market/wallet/transactions`, keep escrow/payout state visible on order records, and release seller wallet funds only after buyer claim completes the claim-code handoff |
 | CR-059 | Post-Phase-0 | Expand community feed to support media-rich posts and comments | Implemented | Community feed posts/comments now accept image and video attachments, support media-only updates with derived titles, render preview grids in the UI, and carry route-level regression coverage for media persistence through thread reloads |
 | CR-060 | Performance | Resolve the oversized Vite client chunk without dropping existing modules | Implemented | `src/App.jsx`, `StudentApp.jsx`, and `SchoolDashboard.jsx` now lazy-load role dashboards, account settings, and heavy non-task workspaces so the production bundle is split by role/module and the Vite chunk warning is cleared |
+| CR-061 | Post-Phase-0 | Expand governance analytics into intervention intelligence reporting | Implemented | Governance now exposes `/analytics/intelligence`, compares current-vs-previous reporting windows, surfaces scoped risk alerts, and shows drill-down intervention queues for high-risk students or schools directly inside the school/state/federal task workspace |
 
 ## 4. Key Technical Change Highlights
 
@@ -91,6 +92,7 @@ It is intentionally product-focused: what changed, why it changed, and where it 
 - marketplace wallet/escrow groundwork is now active in production code through escrow-aware order records, seller wallet balances, wallet transaction history, and route-level claim-to-release coverage
 - media-rich community groundwork is now active in production code through image/video post/comment support, media-aware feed helpers, and route-level coverage for media persistence
 - frontend bundle health is now improved through lazy-loaded role dashboards and heavy workspace modules, bringing the main production chunk back below the Vite warning threshold
+- governance intelligence groundwork is now active in production code through `/analytics/intelligence`, service-level trend/alert logic, and dashboard drill-down reporting for intervention candidates
 
 ## 5. Audit Note
 

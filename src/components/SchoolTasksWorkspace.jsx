@@ -9,6 +9,18 @@ import {
 } from "../lib/constants";
 import { effectiveProgress, formatDateTime } from "../lib/helpers";
 
+function formatTrendDelta(trend) {
+  const sign = trend.deltaValue > 0 ? "+" : "";
+  const suffix = trend.unit === "%" ? " pts" : ` ${trend.unit}`;
+  return `${sign}${trend.deltaValue}${suffix}`;
+}
+
+function toneClassName(tone) {
+  if (tone === "improving") return "intelligence-delta-positive";
+  if (tone === "worsening") return "intelligence-delta-negative";
+  return "intelligence-delta-neutral";
+}
+
 export default function SchoolTasksWorkspace({
   analytics,
   assignment,
@@ -16,6 +28,7 @@ export default function SchoolTasksWorkspace({
   filteredTasks,
   gradeModal,
   hasActiveFilters,
+  intelligence,
   isSchoolRole,
   isStateOrFederal,
   lgaFilter,
@@ -54,6 +67,10 @@ export default function SchoolTasksWorkspace({
   onToggleReminderOffset,
   onToggleStudentSelection,
 }) {
+  const trendRows = intelligence?.trends || [];
+  const alertRows = intelligence?.alerts || [];
+  const interventionRows = intelligence?.interventionQueue || [];
+
   return (
     <>
       <section className="module-hero">
@@ -199,6 +216,131 @@ export default function SchoolTasksWorkspace({
           </div>
         </div>
       </div>
+
+      <section className="panel panel-elevated intelligence-panel">
+        <div className="panel-kicker">Intervention intelligence</div>
+        <div className="panel-title">Trends, alerts, and drill-down reporting</div>
+        <div className="panel-copy intelligence-panel-copy">
+          StudyFlow is comparing the last {intelligence?.windowDays || 30} days of
+          academic and operational activity to the previous window so intervention
+          decisions stay tied to visible risk, not guesswork.
+        </div>
+        {!!intelligence?.generatedAt && (
+          <div className="calendar-meta intelligence-generated-at">
+            Updated: {formatDateTime(intelligence.generatedAt)}
+          </div>
+        )}
+
+        <div className="stats-bar stats-bar-student intelligence-trend-bar">
+          {trendRows.map((trend) => (
+            <div key={trend.id} className="stat-card">
+              <div className="stat-label">{trend.label}</div>
+              <div className="stat-value">
+                {trend.currentValue}
+                {trend.unit === "%" ? "%" : ""}
+              </div>
+              <div className={`stat-sub ${toneClassName(trend.tone)}`}>
+                {formatTrendDelta(trend)} vs previous window
+              </div>
+            </div>
+          ))}
+          {!trendRows.length && (
+            <div className="empty-col">Trend reporting will appear once scope data is available.</div>
+          )}
+        </div>
+
+        <div className="intelligence-grid">
+          <div>
+            <div className="panel-subtitle">Active Alerts ({alertRows.length})</div>
+            {alertRows.length ? (
+              <div className="intelligence-list">
+                {alertRows.map((alert) => (
+                  <div key={alert.id} className="review-card intelligence-card">
+                    <div className="review-card-header">
+                      <div>
+                        <div className="review-card-title">{alert.title}</div>
+                        <div className="review-card-meta">
+                          <span
+                            className={`intelligence-pill intelligence-pill-${alert.severity}`}
+                          >
+                            {alert.severity}
+                          </span>
+                          <span>{alert.signal}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="review-summary-box">{alert.summary}</div>
+                    <div className="grade-feedback-italic">
+                      Next action: {alert.recommendation}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="role-empty-state role-empty-state-compact">
+                <strong>No active intervention alerts right now.</strong>
+                <p>
+                  Current signals look stable in this scope. Keep refreshing so new
+                  backlog, fee, or dispute pressure is surfaced early.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="panel-subtitle">
+              {isSchoolRole ? "Student intervention queue" : "School intervention queue"} (
+              {interventionRows.length})
+            </div>
+            {interventionRows.length ? (
+              <div className="intelligence-list">
+                {interventionRows.map((entry) => (
+                  <div key={entry.id} className="review-card intelligence-card">
+                    <div className="review-card-header">
+                      <div>
+                        <div className="review-card-title">{entry.label}</div>
+                        <div className="review-card-meta">
+                          <span
+                            className={`intelligence-pill intelligence-pill-${entry.riskLevel}`}
+                          >
+                            {entry.riskLevel} risk
+                          </span>
+                          <span>Score {entry.riskScore}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="review-card-meta intelligence-metric-row">
+                      <span>{entry.taskCount} tasks</span>
+                      <span>|</span>
+                      <span>{entry.overdueCount} overdue</span>
+                      <span>|</span>
+                      <span>{entry.submittedBacklogCount} awaiting review</span>
+                      <span>|</span>
+                      <span>{entry.avgEffectiveProgress}% effective progress</span>
+                    </div>
+                    <div className="review-summary-box intelligence-scope-note">
+                      {entry.scopeType === "student"
+                        ? `${entry.schoolName || "School scope"} | ${entry.lgaName || "No LGA"}`
+                        : `${entry.stateName || "No state"} | ${entry.lgaName || "No LGA"} | ${entry.studentCount} student${entry.studentCount === 1 ? "" : "s"}`}
+                    </div>
+                    <div className="grade-feedback-italic">
+                      Next action: {entry.recommendation}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="role-empty-state role-empty-state-compact">
+                <strong>No intervention queue is active yet.</strong>
+                <p>
+                  Once StudyFlow sees overdue work, soft progress, or coverage gaps, the
+                  highest-risk students or schools will appear here first.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <div className="toolbar toolbar-panel">
         <div className="filter-wrap">

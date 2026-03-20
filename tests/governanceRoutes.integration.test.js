@@ -20,6 +20,15 @@ function createGovernanceFixture() {
         body: { role: actor.role, schoolId: input.schoolId || null },
       };
     },
+    async getIntelligence(actor, input) {
+      return {
+        status: 200,
+        body: {
+          days: input.days || null,
+          role: actor.role,
+        },
+      };
+    },
     async getScorecard() {
       return { status: 200, body: { ok: true } };
     },
@@ -28,6 +37,7 @@ function createGovernanceFixture() {
     },
   };
   const validators = {
+    parseAnalyticsIntelligenceQuery: (query) => query,
     parseAnalyticsOverviewQuery: (query) => query,
     parseAnalyticsScorecardQuery: (query) => query,
     parseAuditEventsQuery: (query) => query,
@@ -56,6 +66,30 @@ test("governance routes return analytics for school-scoped actors", async () => 
     assert.deepEqual(response.body, {
       role: ROLE.SCHOOL,
       schoolId: "school-9",
+    });
+  });
+});
+
+test("governance routes expose intelligence reporting for governance actors", async () => {
+  const app = createTestApp();
+  const { service, validators } = createGovernanceFixture();
+
+  registerGovernanceRoutes({
+    app,
+    auth: createStaticAuth({ id: "state-1", role: ROLE.STATE }),
+    asyncRoute: (handler) => handler,
+    requireRole,
+    ROLE,
+    service,
+    validators,
+  });
+
+  await withServer(app, async ({ request }) => {
+    const response = await request("/analytics/intelligence?days=45");
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      days: "45",
+      role: ROLE.STATE,
     });
   });
 });

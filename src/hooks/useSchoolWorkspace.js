@@ -92,6 +92,7 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
   const [schools, setSchools] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [scorecard, setScorecard] = useState(null);
+  const [intelligence, setIntelligence] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -114,13 +115,21 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
       setError("");
       setLoading(true);
 
-      const [studentsData, tasksData, schoolsData, analyticsData, scorecardData] =
+      const [
+        studentsData,
+        tasksData,
+        schoolsData,
+        analyticsData,
+        scorecardData,
+        intelligenceData,
+      ] =
         await Promise.all([
           apiGet("/students"),
           apiGet("/tasks"),
           apiGet("/schools"),
           apiGet("/analytics/overview"),
           apiGet("/analytics/scorecard"),
+          apiGet("/analytics/intelligence"),
         ]);
 
       setStudents(Array.isArray(studentsData) ? studentsData : []);
@@ -128,6 +137,7 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
       setSchools(Array.isArray(schoolsData) ? schoolsData : []);
       setAnalytics(analyticsData || null);
       setScorecard(scorecardData || null);
+      setIntelligence(intelligenceData || null);
     } catch (err) {
       setError(err.message || "Failed to load dashboard data.");
     } finally {
@@ -201,12 +211,16 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
           : view === "fees"
             ? "Payment operations"
             : "Trust and commerce";
+  const activeAlertCount = intelligence?.alerts?.length || 0;
+  const activeInterventionCount = intelligence?.interventionQueue?.length || 0;
 
   const moduleHighlights = {
     tasks: [
       `${visibleStudents.length} visible student${visibleStudents.length === 1 ? "" : "s"}`,
       `${visibleSubmittedCount} submissions ready for review`,
-      `${dueSoonCount} active deadline${dueSoonCount === 1 ? "" : "s"} this week`,
+      activeAlertCount
+        ? `${activeAlertCount} intervention alert${activeAlertCount === 1 ? "" : "s"} active`
+        : `${dueSoonCount} active deadline${dueSoonCount === 1 ? "" : "s"} this week`,
     ],
     courses: [
       "Manage course structure and assessments",
@@ -231,7 +245,10 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
   };
 
   const moduleTabCounts = {
-    tasks: (notificationSummary?.byModule?.tasks || 0) + visibleSubmittedCount,
+    tasks:
+      (notificationSummary?.byModule?.tasks || 0) +
+      visibleSubmittedCount +
+      activeAlertCount,
     courses: notificationSummary?.byModule?.courses || 0,
     collab: notificationSummary?.byModule?.collab || 0,
     fees: notificationSummary?.byModule?.fees || 0,
@@ -242,6 +259,10 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
 
   const taskControlHeadline = !visibleStudents.length
     ? "Confirm scope before operational work begins."
+    : activeAlertCount > 0
+      ? isSchoolRole
+        ? "Intervention signals are active inside your school scope."
+        : "Intervention signals are active across the current governance scope."
     : visibleSubmittedCount > 0
       ? isSchoolRole
         ? "Review submitted work before backlog affects outcomes."
@@ -256,6 +277,10 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
     ? hasActiveFilters
       ? "Current filters may be hiding your working scope. Clear them or refresh data so approved students and schools are visible again."
       : "Refresh scope and confirm that approved students and schools are available before assigning work or reviewing performance."
+    : activeAlertCount > 0
+      ? activeInterventionCount > 0
+        ? `${activeAlertCount} active alert${activeAlertCount === 1 ? "" : "s"} and ${activeInterventionCount} intervention candidate${activeInterventionCount === 1 ? "" : "s"} need attention before the next reporting cycle.`
+        : `${activeAlertCount} active alert${activeAlertCount === 1 ? "" : "s"} need attention before the next reporting cycle.`
     : visibleSubmittedCount > 0
       ? "Keep submitted work visible until grading is complete so students, schools, and intervention teams are not operating on stale signals."
       : selectedStudentIds.length > 0
@@ -451,6 +476,7 @@ export function useSchoolWorkspace({ user, navRoute, notificationSummary }) {
     filteredTasks,
     gradeModal,
     hasActiveFilters,
+    intelligence,
     isSchoolRole,
     isStateOrFederal,
     lgaFilter,
